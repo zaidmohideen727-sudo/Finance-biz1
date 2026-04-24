@@ -1,0 +1,27 @@
+/* App-specific overrides */
+.sidebar-link {
+  @apply flex items-center gap-3 px-3 py-2.5 rounded-sm text-sm font-medium transition-all duration-200;
+}
+.sidebar-link:hover {
+  @apply bg-white/10;
+}
+.sidebar-link.active {
+  @apply bg-white/15 text-white;
+}
+
+.metric-card {
+  @apply bg-white border border-[hsl(var(--border))] shadow-sm rounded-md p-5 transition-all duration-200;
+}
+.metric-card:hover {
+  @apply shadow-md;
+}
+
+.data-table th {
+  @apply bg-[hsl(var(--muted))] border-y border-[hsl(var(--border))] text-xs font-bold uppercase tracking-wider text-[hsl(var(--muted-foreground))] py-3 px-4 text-left;
+}
+.data-table td {
+  @apply border-b border-[hsl(var(--border))] py-3 px-4 align-middle text-sm;
+}
+.data-table tr:hover td {
+  @apply bg-[hsl(var(--muted))]/50;
+}

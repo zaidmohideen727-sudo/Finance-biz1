@@ -1,0 +1,93 @@
+{
+  "theme": "light",
+  "archetype": "Archetype 4: Swiss & High-Contrast",
+  "domain": "Business Management & Trading",
+  "design_philosophy": "Functional beauty, POS-like speed, extreme clarity. The interface must prioritize data density and quick data entry over decorative elements. Pure HTML/Tailwind for layouts, heavily customized Shadcn for logic.",
+  "colors": {
+    "background": "#FFFFFF",
+    "surface": "#F8FAFC",
+    "surface_hover": "#F1F5F9",
+    "primary": "#0F172A",
+    "primary_foreground": "#FFFFFF",
+    "secondary": "#E2E8F0",
+    "secondary_foreground": "#0F172A",
+    "border": "#CBD5E1",
+    "muted": "#94A3B8",
+    "accent": "#F59E0B",
+    "accent_foreground": "#FFFFFF",
+    "destructive": "#EF4444",
+    "destructive_foreground": "#FFFFFF",
+    "success": "#10B981",
+    "success_foreground": "#FFFFFF",
+    "warning": "#F59E0B",
+    "warning_foreground": "#FFFFFF"
+  },
+  "typography": {
+    "heading_font": "Outfit",
+    "body_font": "IBM Plex Sans",
+    "scale": {
+      "h1": "text-3xl sm:text-4xl font-semibold tracking-tight",
+      "h2": "text-2xl sm:text-3xl font-medium tracking-tight",
+      "h3": "text-xl sm:text-2xl font-medium",
+      "h4": "text-lg sm:text-xl font-medium",
+      "body": "text-sm sm:text-base leading-relaxed",
+      "small": "text-xs sm:text-sm font-medium tracking-wide",
+      "overline": "text-xs font-bold uppercase tracking-[0.2em] text-muted"
+    }
+  },
+  "spacing_and_layout": {
+    "philosophy": "Dense 'Control Room' grids. Maximize screen real estate for fast billing.",
+    "container_padding": "p-4 sm:p-6 lg:p-8",
+    "gap_strategy": "gap-4 sm:gap-6",
+    "grid_modes": {
+      "dashboard_metrics": "grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4",
+      "pos_billing": "grid-cols-1 lg:grid-cols-12 gap-6",
+      "pos_main_span": "lg:col-span-8",
+      "pos_sidebar_span": "lg:col-span-4"
+    }
+  },
+  "surfaces_and_borders": {
+    "card_style": "bg-white border border-border shadow-sm rounded-md",
+    "input_style": "bg-white border-2 border-border focus:border-primary focus:ring-0 rounded-sm transition-colors",
+    "button_style": "rounded-sm font-medium tracking-wide shadow-sm transition-all active:scale-[0.98]",
+    "table_style": "w-full text-left border-collapse",
+    "table_header": "bg-surface border-y border-border text-xs font-bold uppercase tracking-wider text-muted py-3 px-4",
+    "table_cell": "border-b border-border py-3 px-4 align-middle"
+  },
+  "components": {
+    "navigation": "Sticky top navigation or slim left sidebar. High contrast bg-primary text-white. Use glassmorphism only if scrolling content underneath, otherwise solid.",
+    "buttons": "Limit use of primary colors to main actions (e.g., 'Generate Invoice', 'Pay'). Secondary actions should be outlined or ghost.",
+    "forms": "Use Shadcn Form, Input, Select. Labels must be bold and concise. Inputs must have clear focus states.",
+    "badges": "Used for order status (Pending, Delivered). Pill-shaped, light background, dark text.",
+    "data_display": "Use Recharts or Shadcn Charts for simple bar/line charts of monthly sales. Minimal tooltips."
+  },
+  "motion_and_interactions": {
+    "hover_states": "Subtle background shifts (e.g., hover:bg-surface-hover) and border darken. No extreme scaling.",
+    "transitions": "transition-all duration-200 ease-in-out",
+    "loading": "Use skeleton loaders matching exact component dimensions, not generic spinners."
+  },
+  "icons_and_assets": {
+    "icon_library": "@phosphor-icons/react",
+    "icon_weight": "regular",
+    "images": {
+      "dashboard_texture": {
+        "url": "https://images.unsplash.com/photo-1771787647816-a4fd93fdb314?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjA2MjJ8MHwxfHNlYXJjaHwxfHxhYnN0cmFjdCUyMHN1YnRsZSUyMGdlb21ldHJpYyUyMHBhdHRlcm4lMjBsaWdodHxlbnwwfHx8fDE3NzU2NTczNzV8MA&ixlib=rb-4.1.0&q=85",
+        "description": "Subtle geometric pattern for empty states or subtle header backgrounds."
+      },
+      "company_logo_placeholder": {
+        "url": "https://images.unsplash.com/photo-1638864616270-64041b699a50?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NTYxOTF8MHwxfHNlYXJjaHwxfHxnZW5lcmljJTIwY29tcGFueSUyMGxvZ28lMjBnZW9tZXRyaWN8ZW58MHx8fHwxNzc1NjU3Mzc1fDA&ixlib=rb-4.1.0&q=85",
+        "description": "Generic geometric logo for brand placeholder."
+      }
+    }
+  },
+  "testing_and_accessibility": {
+    "data_testid": "MANDATORY on all interactive elements. e.g., data-testid='create-order-button'",
+    "contrast": "Ensure minimum 4.5:1 ratio for text. Never use pure transparent backgrounds for headers.",
+    "keyboard_nav": "Crucial for POS speed. Ensure focus rings are highly visible (focus:ring-2 focus:ring-primary focus:ring-offset-1)."
+  },
+  "specific_page_instructions": {
+    "dashboard": "Top row: 4 bento cards for Receivables, Payables, Daily Sales, Monthly Sales. Below: Line chart for sales trend, and a dense table for Recent Orders.",
+    "order_creation": "Split view. Left side: Customer selection and product multi-select/search. Right side: Current order summary with total calculation and primary 'Submit Order' button. Extremely compact.",
+    "invoice_view": "Clean, printable layout. A4 proportions. Header with company info, customer info. Data table with items, qty, price. Totals at bottom right. Must look good when printed (use @media print utilities)."
+  }
+}

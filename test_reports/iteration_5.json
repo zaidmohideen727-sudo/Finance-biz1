@@ -1,0 +1,67 @@
+{
+  "summary": "Phase 4 Mini-Accounting end-to-end testing complete. Backend: 16/16 pytest cases PASS covering order edit/delete lock when invoice exists, supplier_invoice_number propagation, hybrid invoice numbering (manual + duplicate reject + auto), backdated created_at, hybrid purchase numbering, Returns CRUD with quantity validation + auto returned_stock creation + cost_price preservation, order from returned_stock (no auto-purchase, cost_price=100 preserved, profit=80), over-consume blocked, delete-return blocked when used, manual opening returned_stock, customer outstanding including opening_balance + subtracting returns, supplier payable including opening_balance, backdated payment. Frontend verified via Playwright: sidebar has all 12 nav items (Dashboard/Customers/Suppliers/Products/Orders/Purchases/Invoices/Payments/Returns/Analytics/Reports/Migration), /returns page shows two tabs (Customer Returns + Returned Stock) with New Return dialog showing invoice selector, Returned Stock tab has Opening entry control, /migration has all four tabs (Historical Invoice/Purchase/Payment/Opening Balance), Orders page shows 11 'invoiced' lock badges + edit pencil icon only on non-invoiced orders. No JS errors on any page.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Migration > Historical Invoice", "issues": ["Uses browser-native date input (<input type=date> — mm/dd/yyyy placeholder) instead of shadcn Calendar component; inconsistent with rest of app if it uses date-fns/shadcn picker"]},
+      {"screen": "Orders New Order dialog", "issues": ["Supplier Invoice # field is only rendered AFTER 'Add Item' is clicked (per-item). Expected behaviour per spec but may be discoverable only after user adds a product."]}
+    ]
+  },
+  "passed_tests": [
+    "Backend PUT /api/orders/{id} succeeds when no invoice; 400 when invoice exists",
+    "Backend DELETE /api/orders/{id} blocked with invoice reference when invoice exists",
+    "Backend order item.supplier_invoice_number persisted into auto-purchase.supplier_invoice_number",
+    "Backend POST /api/invoices manual invoice_number (INV-{tag}-999) accepted; duplicate 2nd POST returns 400 'already exists'",
+    "Backend POST /api/invoices auto-numbering INV-XXXX still works when no manual supplied",
+    "Backend POST /api/invoices with created_at='2023-01-15T10:00:00+00:00' persists backdated date",
+    "Backend POST /api/invoices/from-order/{id} accepts optional manual invoice_number",
+    "Backend POST /api/purchases manual purchase_number + supplier_invoice_number + created_at all persisted; duplicate purchase_number rejected 400",
+    "Backend POST /api/returns quantity validation: cumulative return qty cannot exceed invoice qty minus prior returns (422 w/ 'available' msg)",
+    "Backend POST /api/returns auto-creates returned_stock entry per item with cost_price preserved (cost=100) and source='customer_return'",
+    "Backend GET /api/invoices/{id} returns returned_amount=300 and balance = total - paid - returned",
+    "Backend GET /api/returned-stock/by-product groups entries and sums remaining correctly",
+    "Backend POST /api/orders item source='returned_stock': reserves stock, cost_price=100 preserved, profit=80, NO auto-purchase created",
+    "Backend POST /api/orders source=returned_stock over-consume returns 400 with 'available' message",
+    "Backend DELETE /api/returns/{id} blocked with 400 when returned_stock quantity_used>0",
+    "Backend POST /api/returned-stock manual opening: source='manual_opening', delete allowed when unused",
+    "Backend DELETE /api/returned-stock/{id} blocked when source=customer_return (directed to delete return instead)",
+    "Backend GET /api/reports/customer-outstanding/{id} includes opening_balance (500.0) in total_outstanding; customer detail exposes total_returned>=300",
+    "Backend GET /api/reports/supplier-payable includes opening_balance (300.0) in payable",
+    "Backend POST /api/payments with backdated created_at='2022-12-01' persisted",
+    "Frontend Sidebar: all 12 nav items rendered (Dashboard, Customers, Suppliers, Products, Orders, Purchases, Invoices, Payments, Returns, Analytics, Reports, Migration)",
+    "Frontend /returns page: Customer Returns + Returned Stock tabs; New Return button opens dialog with Invoice selector; Returned Stock tab has opening entry control; RET-0001 + RET-0002 seed rows visible",
+    "Frontend /migration page: all 4 tabs (Historical Invoice, Historical Purchase, Historical Payment, Opening Balance); form renders customer, invoice date, invoice number, items, notes + Create button",
+    "Frontend /orders page: 11 'invoiced' lock badges on invoiced rows; edit pencil icon only on ORD-0016 (no invoice) — other rows show Invoice link without edit",
+    "Frontend New Order dialog opens cleanly (Customer selector + Add Item button); no JS errors on any Phase 4 page"
+  ],
+  "test_report_links": [
+    "/app/backend/tests/test_phase4.py",
+    "/app/test_reports/pytest/phase4_results.xml"
+  ],
+  "action_items": [
+    "[Optional] Consider replacing native <input type=date> in MigrationPage with shadcn Calendar for consistency (design polish)",
+    "[Optional] In NewOrder dialog, display inline hint about per-item 'Supplier Invoice #' and 'source=returned_stock' chooser so users discover them without first clicking Add Item",
+    "[Optional] OrdersPage 'Reason' field inside New Return dialog appears only per-row once an item is checked — consider adding a column header label for clarity"
+  ],
+  "critical_code_review_comments": [
+    "routes/orders.py _build_items reserves returned_stock BEFORE validating the rest of payload — if a later item fails validation, reserved quantity is not released. Wrap reservation in try/except or validate all items before reserving.",
+    "routes/returns.py _add_to_returned_stock creates one stock doc per invoice item even if the same product appears twice in a return — correct for cost lineage but could lead to fragmented rows. Acceptable trade-off; document intent.",
+    "routes/invoices._compute_total_returns is called on every GET /invoices/{id} and runs an aggregate. Add an index on returns.invoice_id (already present in server.py per prompt) but also consider caching for hot invoices.",
+    "routes/reports.financial_summary still does O(N*M) per-item product lookups — same flag as Phase 3; batch with $lookup if perf becomes an issue.",
+    "routes/orders.py delete_order does not release returned_stock reservation before deleting purchases — order release happens but on delete path _release_returned_stock_for_order is called BEFORE delete_one, which relies on the order still existing; OK today but fragile if reordered.",
+    "routes/returned_stock.py delete endpoint does not check if stock is part of an unpaid invoice allocation — only checks quantity_used. Acceptable.",
+    "routes/customers.py list_customers now runs 3 aggregations per call (inv/pay/ret). For large tenants consider a single $facet pipeline."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_phase4.py (new - 16 test cases, 100% pass using cookie-based auth session)"
+  ],
+  "success_rate": {"backend": "100% (16/16)", "frontend": "100% (all Phase 4 UI flows verified)"},
+  "test_credentials": "admin@example.com / admin123 (verified; JWT stored in HttpOnly 'access_token' cookie — tests use requests.Session())",
+  "seed_data_creation": "test_phase4.py creates TEST_Cust_<tag>, TEST_Sup_<tag>, TEST_Prod_<tag> with opening_balance seeds; creates returns RET-XXXX + returned_stock entries; tears down returns→returned_stock→payments→invoices→purchases→orders→product→customer→supplier. Two leftover returns (RET-0001 INV-2060 Modern Electrical, RET-0002 INV-2064) from prior manual validation were left intentionally.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Phase 4 fully verified. Auth uses cookies (no bearer token exposed in /auth/login body — response is just user profile; token set as HttpOnly 'access_token' cookie). Always use requests.Session() after login. Run /app/backend/tests/test_phase4.py (with test_phase2.py + test_phase3.py for regression). Key invariants: (1) returned_stock cost_price is the PRIMARY source of truth for profit when source='returned_stock'; never fall back to product.cost_price; (2) manual invoice_number / purchase_number bypasses counter but must be unique; (3) customer outstanding = opening + sum(invoice.total_amount) - sum(payment.amount) - sum(return.items.amount); (4) supplier payable = opening + sum(purchase.total_amount) - sum(supplier_payment.amount). Frontend sidebar nav order is the 12 items listed in passed_tests.",
+  "rca_of_the_issue": "First pytest run produced 16 failures all caused by login response NOT containing an access_token field — backend sets token as HttpOnly cookie only. Fix was to replace Bearer-header auth with requests.Session() which automatically persists Set-Cookie. No app-side bug."
+}
