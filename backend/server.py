@@ -22,13 +22,27 @@ from email_service import send_email, build_otp_email_html
 
 app = FastAPI(redirect_slashes=False)
 
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=os.environ.get('CORS_ORIGINS', '*').split(','),
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+# CORS — if CORS_ORIGINS is "*" we cannot use allow_credentials=True (browsers block it).
+# We either:
+#   1) echo back the request origin (works with credentials), or
+#   2) use the explicit list the user configured.
+_cors_env = os.environ.get('CORS_ORIGINS', '*').strip()
+if _cors_env == '*' or _cors_env == '':
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origin_regex=".*",   # echoes Origin back → compatible with credentials
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
+else:
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=[o.strip() for o in _cors_env.split(',') if o.strip()],
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
 
 # ── Auth Routes ──
 auth_router = APIRouter(prefix="/api/auth", tags=["auth"])
