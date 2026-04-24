@@ -91,10 +91,32 @@ async def get_invoice(invoice_id: str, user=Depends(get_current_user)):
         {"$match": {"allocations.reference_id": invoice_id, "allocations.reference_type": "invoice"}},
         {"$group": {"_id": None, "total": {"$sum": "$allocations.amount"}}}
     ]).to_list(1)
-    invoice["paid_amount"] = pay_result[0]["total"] if pay_result else 0
-    invoice["returned_amount"] = await _compute_total_returns(invoice_id)
-    # Effective outstanding = total_amount - paid - returns
-    invoice["balance"] = round(invoice["total_amount"] - invoice["paid_amount"] - invoice["returned_amount"], 2)
+    invoice["paid_amount"] = round(pay_result[0]["total"] if pay_result else 0, 2)
+    invoice["returned_amount"] = round(await _compute_total_returns(invoice_id), 2)
+
+    # Credit notes attached to this invoice
+    credit_notes = await db.returns.find(
+        {"invoice_id": invoice_id},
+        {"_id": 0, "id": 1, "return_number": 1, "credit_note_number": 1,
+         "total_amount": 1, "created_at": 1, "items": 1, "notes": 1}
+    ).sort("created_at", 1).to_list(1000)
+    for cn in credit_notes:
+        # Backfill credit_note_number for legacy records
+        if not cn.get("credit_note_number") and cn.get("return_number"):
+            cn["credit_note_number"] = cn["return_number"].replace("RET-", "CN-")
+    invoice["credit_notes"] = credit_notes
+
+    # Manual settlement (for historical invoices) — stored on the invoice itself
+    manual_settled = round(float(invoice.get("manual_settled_amount", 0) or 0), 2)
+    invoice["manual_settled_amount"] = manual_settled
+
+    # Effective outstanding = total_amount - paid - returns - manual settlement
+    invoice["balance"] = round(
+        invoice["total_amount"] - invoice["paid_amount"]
+        - invoice["returned_amount"] - manual_settled, 2
+    )
+    # Net payable after credit notes (informational)
+    invoice["net_payable"] = round(invoice["total_amount"] - invoice["returned_amount"], 2)
 
     return invoice
 
@@ -195,3 +217,79 @@ async def delete_invoice(invoice_id: str, user=Depends(get_current_user)):
     if result.deleted_count == 0:
         raise HTTPException(status_code=404, detail="Invoice not found")
     return {"message": "Invoice deleted"}
+
+
+class ManualSettleInput(BaseModel):
+    amount: Optional[float] = None   # None/absent => settle full outstanding
+    mark_as: Optional[str] = "paid"  # "paid" or "partial"
+    note: Optional[str] = ""
+
+
+@router.post("/{invoice_id}/settle")
+async def manual_settle_invoice(invoice_id: str, data: ManualSettleInput, user=Depends(get_current_user)):
+    """Mark an invoice as settled without recording a payment.
+
+    Use for historical invoices where the money was collected outside the system.
+    The amount is stored on the invoice itself (manual_settled_amount) and
+    feeds into balance computation. Status is recomputed.
+    """
+    invoice = await db.invoices.find_one({"id": invoice_id}, {"_id": 0})
+    if not invoice:
+        raise HTTPException(status_code=404, detail="Invoice not found")
+
+    # Current paid + returns already reduce outstanding. Determine the remaining.
+    pay_result = await db.payments.aggregate([
+        {"$match": {"payment_type": "customer"}},
+        {"$unwind": "$allocations"},
+        {"$match": {"allocations.reference_id": invoice_id, "allocations.reference_type": "invoice"}},
+        {"$group": {"_id": None, "total": {"$sum": "$allocations.amount"}}}
+    ]).to_list(1)
+    paid = pay_result[0]["total"] if pay_result else 0
+    returned = await _compute_total_returns(invoice_id)
+    current_settled = float(invoice.get("manual_settled_amount", 0) or 0)
+    total = float(invoice.get("total_amount", 0))
+    outstanding = round(total - paid - returned - current_settled, 2)
+
+    if outstanding <= 0.01:
+        raise HTTPException(status_code=400, detail="Invoice already fully settled")
+
+    if data.amount is None or data.amount <= 0:
+        settle_amount = outstanding
+    else:
+        settle_amount = round(min(float(data.amount), outstanding), 2)
+
+    new_settled = round(current_settled + settle_amount, 2)
+
+    # Recompute new status
+    new_balance = round(total - paid - returned - new_settled, 2)
+    if new_balance <= 0.01:
+        new_status = "paid"
+    elif (paid + new_settled + returned) > 0:
+        new_status = "partial"
+    else:
+        new_status = "unpaid"
+
+    # Append to history log on the invoice
+    log_entry = {
+        "id": str(uuid.uuid4()),
+        "amount": settle_amount,
+        "note": data.note or "",
+        "settled_at": datetime.now(timezone.utc).isoformat(),
+        "settled_by": user.get("email", ""),
+    }
+    history = list(invoice.get("manual_settle_history", []))
+    history.append(log_entry)
+
+    await db.invoices.update_one(
+        {"id": invoice_id},
+        {"$set": {
+            "manual_settled_amount": new_settled,
+            "manual_settle_history": history,
+            "status": new_status,
+        }}
+    )
+    updated = await db.invoices.find_one({"id": invoice_id}, {"_id": 0})
+    updated["paid_amount"] = round(paid, 2)
+    updated["returned_amount"] = round(returned, 2)
+    updated["balance"] = new_balance
+    return updated

@@ -17,7 +17,7 @@
     --secondary: 210 40% 93%;
     --secondary-foreground: 222 47% 11%;
     --muted: 210 40% 96%;
-    --muted-foreground: 215 16% 57%;
+    --muted-foreground: 215 16% 47%;
     --accent: 38 92% 50%;
     --accent-foreground: 0 0% 100%;
     --destructive: 0 84% 60%;
@@ -33,6 +33,38 @@
     --chart-5: 340 75% 55%;
     --success: 160 84% 39%;
     --warning: 38 92% 50%;
+    --surface: 210 40% 98%;
+    --surface-muted: 210 40% 95%;
+  }
+  .dark {
+    --background: 222 47% 7%;
+    --foreground: 210 40% 96%;
+    --card: 222 45% 10%;
+    --card-foreground: 210 40% 96%;
+    --popover: 222 45% 10%;
+    --popover-foreground: 210 40% 96%;
+    --primary: 210 40% 96%;
+    --primary-foreground: 222 47% 11%;
+    --secondary: 222 40% 18%;
+    --secondary-foreground: 210 40% 96%;
+    --muted: 222 40% 16%;
+    --muted-foreground: 215 16% 70%;
+    --accent: 38 92% 55%;
+    --accent-foreground: 222 47% 11%;
+    --destructive: 0 72% 55%;
+    --destructive-foreground: 0 0% 98%;
+    --border: 222 30% 22%;
+    --input: 222 30% 22%;
+    --ring: 210 40% 80%;
+    --chart-1: 38 92% 55%;
+    --chart-2: 160 60% 55%;
+    --chart-3: 210 40% 96%;
+    --chart-4: 280 65% 70%;
+    --chart-5: 340 75% 65%;
+    --success: 160 64% 50%;
+    --warning: 38 92% 55%;
+    --surface: 222 45% 9%;
+    --surface-muted: 222 40% 13%;
   }
 }
 
@@ -54,6 +86,39 @@
     display: contents !important;
   }
 }
+
+/* Theme-aware surface classes that replace hardcoded #F8FAFC / slate backgrounds */
+.surface-soft { background-color: hsl(var(--surface)); color: hsl(var(--foreground)); }
+.surface-sunken { background-color: hsl(var(--surface-muted)); color: hsl(var(--foreground)); }
+.surface-elevated { background-color: hsl(var(--card)); color: hsl(var(--card-foreground)); }
+
+/* In dark mode, override the hardcoded slate backgrounds that pages still use */
+.dark .bg-\[\#F8FAFC\] { background-color: hsl(var(--surface-muted)) !important; }
+.dark .bg-\[\#0F172A\] { background-color: hsl(var(--primary)) !important; color: hsl(var(--primary-foreground)) !important; }
+.dark .hover\:bg-\[\#1E293B\]:hover { background-color: hsl(var(--secondary)) !important; }
+.dark .text-emerald-700 { color: hsl(160 64% 60%) !important; }
+.dark .text-emerald-800 { color: hsl(160 64% 65%) !important; }
+.dark .bg-emerald-50 { background-color: hsl(160 40% 14%) !important; }
+.dark .border-emerald-200 { border-color: hsl(160 40% 25%) !important; }
+.dark .text-blue-800 { color: hsl(215 70% 75%) !important; }
+.dark .bg-blue-50 { background-color: hsl(215 40% 14%) !important; }
+.dark .border-blue-200 { border-color: hsl(215 40% 25%) !important; }
+.dark .text-amber-800 { color: hsl(38 92% 70%) !important; }
+.dark .bg-amber-50 { background-color: hsl(38 40% 14%) !important; }
+.dark .text-red-700 { color: hsl(0 72% 70%) !important; }
+.dark .text-red-800 { color: hsl(0 72% 72%) !important; }
+.dark .bg-red-100 { background-color: hsl(0 40% 18%) !important; }
+.dark .bg-amber-100 { background-color: hsl(38 40% 18%) !important; }
+.dark .bg-emerald-100 { background-color: hsl(160 40% 18%) !important; }
+.dark .bg-blue-100 { background-color: hsl(215 40% 18%) !important; }
+.dark .bg-indigo-100 { background-color: hsl(240 40% 20%) !important; }
+.dark .bg-gray-100 { background-color: hsl(222 30% 20%) !important; }
+.dark .bg-gray-200 { background-color: hsl(222 30% 24%) !important; }
+.dark .text-gray-700 { color: hsl(222 15% 78%) !important; }
+.dark .text-gray-800 { color: hsl(222 15% 85%) !important; }
+.dark .bg-muted\/40 { background-color: hsl(var(--muted) / 0.55) !important; }
+.dark .bg-white { background-color: hsl(var(--card)) !important; color: hsl(var(--card-foreground)) !important; }
+.dark .border-\[\#0F172A\] { border-color: hsl(var(--ring)) !important; }
 
 /* Print styles */
 @media print {

@@ -188,11 +188,12 @@ export default function ReturnsPage() {
                returns.length === 0 ? <div className="p-8 text-center text-muted-foreground"><RotateCcw size={32} className="mx-auto mb-2 opacity-30" />No returns recorded yet.</div> :
                 <div className="overflow-x-auto">
                   <table className="data-table w-full">
-                    <thead><tr><th>Return #</th><th>Invoice</th><th>Customer</th><th>Items</th><th>Amount</th><th>Date</th><th className="w-16">Actions</th></tr></thead>
+                    <thead><tr><th>Return #</th><th>Credit Note</th><th>Invoice</th><th>Customer</th><th>Items</th><th>Amount</th><th>Date</th><th className="w-16">Actions</th></tr></thead>
                     <tbody>
                       {returns.map(r => (
                         <tr key={r.id} data-testid={`return-row-${r.id}`}>
                           <td className="font-medium">{r.return_number}</td>
+                          <td className="font-medium text-amber-700" data-testid={`credit-note-${r.id}`}>{r.credit_note_number || r.return_number?.replace("RET-", "CN-")}</td>
                           <td>{r.invoice_number}</td>
                           <td>{r.customer_name}</td>
                           <td>{r.items?.length || 0}</td>
@@ -307,26 +308,80 @@ export default function ReturnsPage() {
 
       {/* Manual Opening Stock Dialog */}
       <Dialog open={stockDialogOpen} onOpenChange={setStockDialogOpen}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader><DialogTitle style={{ fontFamily: 'Outfit, sans-serif' }}>Add Opening Returned Stock</DialogTitle></DialogHeader>
-          <div className="space-y-3 py-2">
-            <div>
-              <Label className="text-xs font-bold uppercase tracking-wider">Product *</Label>
-              <SearchableSelect options={productOptions} value={stockForm.product_id} onSelect={id => {
-                const p = products.find(x => x.id === id);
-                setStockForm(f => ({ ...f, product_id: id, product_name: p?.name || "", cost_price: p?.cost_price || "", unit_price: p?.selling_price || "" }));
-              }} placeholder="Select product..." />
+        <DialogContent className="sm:max-w-lg max-h-[92vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle style={{ fontFamily: 'Outfit, sans-serif' }}>Add Opening Returned Stock</DialogTitle>
+            <p className="text-xs text-muted-foreground pt-1">Use this for historical returned stock you already had before using the system.</p>
+          </DialogHeader>
+          <div className="space-y-5 py-4">
+            <div className="space-y-2">
+              <Label className="text-xs font-bold uppercase tracking-wider">Product <span className="text-destructive">*</span></Label>
+              <SearchableSelect
+                options={productOptions}
+                value={stockForm.product_id}
+                onSelect={id => {
+                  const p = products.find(x => x.id === id);
+                  setStockForm(f => ({
+                    ...f,
+                    product_id: id,
+                    product_name: p?.name || "",
+                    cost_price: p?.cost_price ?? "",
+                    unit_price: p?.selling_price ?? "",
+                  }));
+                }}
+                placeholder="Select product..."
+              />
             </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div><Label className="text-xs uppercase">Quantity *</Label><Input type="number" value={stockForm.quantity} onChange={e => setStockForm(f => ({ ...f, quantity: e.target.value }))} data-testid="stock-qty-input" /></div>
-              <div><Label className="text-xs uppercase">Cost Price *</Label><Input type="number" value={stockForm.cost_price} onChange={e => setStockForm(f => ({ ...f, cost_price: e.target.value }))} data-testid="stock-cost-input" /></div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label className="text-xs font-bold uppercase tracking-wider">Quantity <span className="text-destructive">*</span></Label>
+                <Input
+                  type="number"
+                  min="0"
+                  value={stockForm.quantity}
+                  onChange={e => setStockForm(f => ({ ...f, quantity: e.target.value }))}
+                  placeholder="e.g. 10"
+                  data-testid="stock-qty-input"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label className="text-xs font-bold uppercase tracking-wider">Cost Price <span className="text-destructive">*</span></Label>
+                <Input
+                  type="number"
+                  min="0"
+                  value={stockForm.cost_price}
+                  onChange={e => setStockForm(f => ({ ...f, cost_price: e.target.value }))}
+                  placeholder="Per-unit cost"
+                  data-testid="stock-cost-input"
+                />
+              </div>
             </div>
-            <div><Label className="text-xs uppercase">Unit Price (optional)</Label><Input type="number" value={stockForm.unit_price} onChange={e => setStockForm(f => ({ ...f, unit_price: e.target.value }))} /></div>
-            <Textarea value={stockForm.notes} onChange={e => setStockForm(f => ({ ...f, notes: e.target.value }))} placeholder="Notes" className="min-h-[50px]" />
+
+            <div className="space-y-2">
+              <Label className="text-xs font-bold uppercase tracking-wider">Unit Price (optional)</Label>
+              <Input
+                type="number"
+                min="0"
+                value={stockForm.unit_price}
+                onChange={e => setStockForm(f => ({ ...f, unit_price: e.target.value }))}
+                placeholder="Selling price reference"
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label className="text-xs font-bold uppercase tracking-wider">Notes</Label>
+              <Textarea
+                value={stockForm.notes}
+                onChange={e => setStockForm(f => ({ ...f, notes: e.target.value }))}
+                placeholder="e.g. Carry-forward from prior period"
+                className="min-h-[60px]"
+              />
+            </div>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setStockDialogOpen(false)} className="rounded-sm">Cancel</Button>
-            <Button onClick={handleAddManualStock} className="bg-[#0F172A] hover:bg-[#1E293B] rounded-sm" data-testid="submit-stock-button">Add Stock</Button>
+            <Button onClick={handleAddManualStock} className="bg-[#0F172A] hover:bg-[#1E293B] text-white rounded-sm" data-testid="submit-stock-button">Add Stock</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

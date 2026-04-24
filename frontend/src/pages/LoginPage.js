@@ -64,9 +64,15 @@ export default function LoginPage() {
     setLoading(true);
     try {
       const { data } = await API.post("/auth/forgot-password", { email });
-      setGeneratedOtp(data.otp);
+      if (data.email_sent) {
+        setGeneratedOtp("");
+        toast.success(`OTP sent to ${email}. Check your inbox (and spam folder).`);
+      } else {
+        // Email service not configured — fall back to showing OTP inline
+        setGeneratedOtp(data.otp || "");
+        toast.success("OTP generated. Email not configured — code shown below.");
+      }
       setMode("reset");
-      toast.success("OTP generated successfully");
     } catch (err) {
       console.error("Forgot password error:", err);
       setError(formatError(err));
@@ -100,7 +106,7 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-[#F8FAFC] p-4">
+    <div className="min-h-screen flex items-center justify-center bg-[hsl(var(--surface-muted))] p-4">
       <Card className="w-full max-w-md shadow-lg border-[hsl(var(--border))]">
         <CardHeader className="text-center pb-2">
           <div className="mx-auto w-12 h-12 rounded-md bg-[#0F172A] flex items-center justify-center mb-3">
@@ -192,10 +198,14 @@ export default function LoginPage() {
           {/* RESET PASSWORD FORM */}
           {mode === "reset" && (
             <form onSubmit={handleResetPassword} className="space-y-4">
-              {generatedOtp && (
+              {generatedOtp ? (
                 <div className="bg-blue-50 border border-blue-200 text-blue-800 p-3 rounded-sm text-sm" data-testid="otp-display">
                   <span className="font-bold">Your OTP:</span> <span className="font-mono text-lg">{generatedOtp}</span>
-                  <p className="text-xs mt-1 text-blue-600">Copy this OTP and enter below. Expires in 15 minutes.</p>
+                  <p className="text-xs mt-1 text-blue-600">Email service not configured — copy this OTP and enter below. Expires in 15 minutes.</p>
+                </div>
+              ) : (
+                <div className="bg-emerald-50 border border-emerald-200 text-emerald-800 p-3 rounded-sm text-sm" data-testid="otp-email-sent">
+                  We sent a 6-digit OTP to <strong>{email}</strong>. Check your inbox (and spam folder). Expires in 15 minutes.
                 </div>
               )}
               <div className="space-y-2">

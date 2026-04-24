@@ -50,7 +50,8 @@ async def get_dashboard_summary(user=Depends(get_current_user)):
     ]).to_list(1)
     monthly_sales = monthly[0]["total"] if monthly else 0
 
-    # Total profit (sales - cost)
+    # Total profit = (sales - returns revenue) - (cost of sold items - cost of returned items)
+    # This ensures returned items are excluded from both revenue and cost.
     total_cost = 0
     all_invoices = await db.invoices.find({}, {"_id": 0, "items": 1}).to_list(10000)
     for inv in all_invoices:
@@ -58,7 +59,18 @@ async def get_dashboard_summary(user=Depends(get_current_user)):
             product = await db.products.find_one({"id": item.get("product_id")}, {"_id": 0, "cost_price": 1})
             if product:
                 total_cost += (product.get("cost_price", 0) * item.get("quantity", 0))
-    total_profit = total_invoiced - total_cost
+
+    # Returns: subtract their revenue AND their (snapshotted) cost
+    ret_agg = await db.returns.aggregate([
+        {"$unwind": "$items"},
+        {"$group": {"_id": None,
+                    "revenue": {"$sum": "$items.amount"},
+                    "cost": {"$sum": {"$multiply": ["$items.cost_price", "$items.quantity"]}}}}
+    ]).to_list(1)
+    ret_revenue = ret_agg[0]["revenue"] if ret_agg else 0
+    ret_cost = ret_agg[0]["cost"] if ret_agg else 0
+
+    total_profit = (total_invoiced - ret_revenue) - (total_cost - ret_cost)
 
     # Sales trend (last 30 days)
     thirty_days_ago = (datetime.now(timezone.utc) - timedelta(days=30)).isoformat()

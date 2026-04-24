@@ -41,6 +41,7 @@ export default function OrdersPage() {
   const [detailOpen, setDetailOpen] = useState(false);
   const [selectedOrder, setSelectedOrder] = useState(null);
   const [form, setForm] = useState(emptyForm());
+  const [invoiceDialog, setInvoiceDialog] = useState({ open: false, orderId: null, invoice_number: "", created_at: "" });
 
   const fetchOrders = useCallback(async () => {
     try {
@@ -202,13 +203,26 @@ export default function OrdersPage() {
     } catch (err) { toast.error("Failed to update status"); }
   };
 
-  const generateInvoice = async (orderId) => {
+  const openGenerateInvoice = (orderId) => {
+    setInvoiceDialog({ open: true, orderId, invoice_number: "", created_at: "" });
+  };
+
+  const confirmGenerateInvoice = async () => {
+    const { orderId, invoice_number, created_at } = invoiceDialog;
+    if (!orderId) return;
     try {
-      await API.post(`/invoices/from-order/${orderId}`);
+      const payload = {};
+      if (invoice_number && invoice_number.trim()) payload.invoice_number = invoice_number.trim();
+      if (created_at) payload.created_at = new Date(created_at).toISOString();
+      await API.post(`/invoices/from-order/${orderId}`, payload);
       toast.success("Invoice generated");
+      setInvoiceDialog({ open: false, orderId: null, invoice_number: "", created_at: "" });
+      setDetailOpen(false);
       fetchOrders();
     } catch (err) { toast.error(err.response?.data?.detail || "Failed to generate invoice"); }
   };
+
+  const generateInvoice = (orderId) => openGenerateInvoice(orderId);
 
   const handleDelete = async (id) => {
     if (!window.confirm("Delete this order?")) return;
@@ -500,6 +514,44 @@ export default function OrdersPage() {
               </div>
             </div>
           )}
+        </DialogContent>
+      </Dialog>
+      {/* Generate Invoice Dialog — supports manual invoice number (hybrid) */}
+      <Dialog open={invoiceDialog.open} onOpenChange={(v) => setInvoiceDialog(d => ({ ...d, open: v }))}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle style={{ fontFamily: 'Outfit, sans-serif' }}>Generate Invoice</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="space-y-2">
+              <Label className="text-xs font-bold uppercase tracking-wider">Invoice Number</Label>
+              <Input
+                value={invoiceDialog.invoice_number}
+                onChange={e => setInvoiceDialog(d => ({ ...d, invoice_number: e.target.value }))}
+                placeholder="Leave blank for auto-number"
+                data-testid="manual-invoice-number-input"
+              />
+              <p className="text-[11px] text-muted-foreground">
+                Leave empty to auto-generate (e.g. <code>INV-0001</code>). Enter a value to override (e.g. legacy <code>INV-2023-105</code>). Must be unique.
+              </p>
+            </div>
+            <div className="space-y-2">
+              <Label className="text-xs font-bold uppercase tracking-wider">Invoice Date (optional)</Label>
+              <Input
+                type="date"
+                value={invoiceDialog.created_at}
+                onChange={e => setInvoiceDialog(d => ({ ...d, created_at: e.target.value }))}
+                data-testid="manual-invoice-date-input"
+              />
+              <p className="text-[11px] text-muted-foreground">Use for backdated historical entries.</p>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setInvoiceDialog(d => ({ ...d, open: false }))} className="rounded-sm">Cancel</Button>
+            <Button onClick={confirmGenerateInvoice} className="bg-[#0F172A] hover:bg-[#1E293B] rounded-sm text-white" data-testid="confirm-generate-invoice-button">
+              Generate Invoice
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>

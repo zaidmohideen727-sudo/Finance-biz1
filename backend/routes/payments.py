@@ -59,9 +59,19 @@ async def recalc_invoice_status(invoice_id: str):
         {"$group": {"_id": None, "total": {"$sum": "$allocations.amount"}}}
     ]).to_list(1)
     total_paid = pay_total[0]["total"] if pay_total else 0
-    if total_paid <= 0:
+    # Include returns (credit notes) and manual settlement in the status
+    ret_total = await db.returns.aggregate([
+        {"$match": {"invoice_id": invoice_id}},
+        {"$unwind": "$items"},
+        {"$group": {"_id": None, "total": {"$sum": "$items.amount"}}}
+    ]).to_list(1)
+    total_returned = ret_total[0]["total"] if ret_total else 0
+    manual_settled = float(invoice.get("manual_settled_amount", 0) or 0)
+    total_amount = float(invoice.get("total_amount", 0))
+    covered = total_paid + total_returned + manual_settled
+    if covered <= 0.01:
         new_status = "unpaid"
-    elif total_paid >= invoice["total_amount"]:
+    elif covered >= total_amount - 0.01:
         new_status = "paid"
     else:
         new_status = "partial"

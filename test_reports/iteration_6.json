@@ -1,0 +1,64 @@
+{
+  "summary": "Phase 5 critical-fix regression complete. Backend: 12/12 pytest cases PASS (auth + forgot/reset password fallback, hybrid invoice numbering, enriched invoice GET, payment CRUD recalc, returns with CN-NNNN + qty validation, manual settle partial/full, financial-summary math identity, dashboard profit drops by exactly 50 after 1-qty return, manual opening returned-stock, settings counters valid/invalid). Frontend: login, theme toggle (persists in localStorage key 'ctb.theme'), Orders→Generate Invoice dialog (manual-invoice-number-input, manual-invoice-date-input, confirm-generate-invoice-button all present), Invoices View & Settle dialogs, Returns page with Credit Note column (CN-0001/CN-0002), Returned-Stock Opening entry, forgot-password fallback shows OTP inline ('Your OTP: 887458'). Fixed 4 missing imports on InvoicesPage (DialogFooter, CheckCircle2, Label, Textarea, FileMinus) that caused Uncaught ReferenceError crashes — all invoice flows now error-free.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Migration > Historical Invoice", "issues": ["Uses native <input type=date> (mm/dd/yyyy placeholder) — carried over from Phase 4, not blocking"]}
+    ]
+  },
+  "passed_tests": [
+    "Backend login admin@example.com/admin123 returns 200 and sets access_token cookie",
+    "Backend POST /api/auth/forgot-password returns email_sent:false and 6-digit otp (fallback)",
+    "Backend reset-password round-trip: reset → login with new → reset back to admin123",
+    "Backend POST /api/invoices/from-order/{id} with {} → INV-XXXX auto-number (manual_number=false)",
+    "Backend POST /api/invoices/from-order/{id} with manual invoice_number + backdated created_at → accepted; duplicate on next order returns 400 'already exists'",
+    "Backend GET /api/invoices/{id} returns paid_amount, returned_amount, balance, net_payable, credit_notes, manual_settled_amount",
+    "Backend payment create (partial 200 of 600) → status=partial, balance=400; edit to 100 → balance=500; delete → status=unpaid, balance=600",
+    "Backend POST /api/returns (qty=2 unit=150) → credit_note_number CN-XXXX; invoice GET shows returned_amount=300, balance=1050, credit_notes len=1",
+    "Backend POST /api/returns over-qty returns 400 'only X available'",
+    "Backend POST /api/invoices/{id}/settle amount=400 on 1200 invoice → manual_settled_amount=400, status=partial, balance=800",
+    "Backend POST /api/invoices/{id}/settle {} → manual_settled_amount=1200, status=paid, balance=0",
+    "Backend GET /api/reports/financial-summary has total_sales, returns_revenue, net_sales, total_cost, returns_cost, net_cost, total_profit and net_sales=total_sales-returns_revenue, net_cost=total_cost-returns_cost, total_profit=net_sales-net_cost",
+    "Backend GET /api/dashboard/summary total_profit drops by exactly 50 (rev 150 − cost 100) after 1-qty return",
+    "Backend POST /api/returned-stock manual opening → source='manual_opening'; appears in GET list and GET /by-product",
+    "Backend GET /api/settings/counters lists invoices/purchases/orders; PUT counter below max existing returns 400; PUT safe high value returns {next: value+1}",
+    "Frontend: login + theme-toggle-button switches html class 'dark' and persists key 'ctb.theme' in localStorage",
+    "Frontend: /invoices loads with 7 view-invoice-* and 6 settle-invoice-* buttons",
+    "Frontend: settle dialog has settle-amount-input + confirm-settle-button; submits (amount=10) without runtime error",
+    "Frontend: view dialog renders credit-note-line-* entries (1 CN shown on invoice with return)",
+    "Frontend: /orders Generate Invoice dialog shows manual-invoice-number-input + manual-invoice-date-input + confirm-generate-invoice-button",
+    "Frontend: /returns Customer Returns tab shows Credit Note column with CN-0001 / CN-0002",
+    "Frontend: /returns Returned Stock → Opening Stock dialog renders product + qty + cost + price fields (aligned at 1440 viewport)",
+    "Frontend: LoginPage forgot-password submit (fallback) shows 'Your OTP: NNNNNN' + 'Email service not configured — copy this OTP' — user can proceed to reset"
+  ],
+  "test_report_links": [
+    "/app/backend/tests/test_phase5.py",
+    "/app/test_reports/pytest/phase5_results.xml"
+  ],
+  "action_items": [
+    "Already-fixed-by-test-agent: added missing imports on /app/frontend/src/pages/InvoicesPage.js (DialogFooter, Label, Textarea, CheckCircle2, FileMinus). Please review & keep the fix.",
+    "[Optional polish] No explicit /forgot-password route; flow is inside LoginPage via forgot-password-link. If you want deep-linking, add <Route path=\"/forgot-password\" element={<LoginPage initialMode=\"forgot\" />} />.",
+    "[Optional polish] Replace native date input on Migration page with shadcn Calendar component for consistency."
+  ],
+  "critical_code_review_comments": [
+    "InvoicesPage.js had 5 missing imports from lucide-react + ui components. A pre-commit lint (e.g. eslint no-undef) would have caught these before runtime. Consider adding 'react/jsx-no-undef' rule and running it in CI.",
+    "routes/dashboard.py total_profit still does O(N*M) per-invoice-item product lookups for cost (same flag as prior iterations). For ≥1000 invoices this will be slow; batch via $lookup or cache cost in invoice items at creation.",
+    "routes/invoices.py get_invoice runs 3 aggregations per GET (payments, returns, credit_notes find). For hot invoices this may be costly; add a composite index or cache layer.",
+    "Email_service fallback path is intentional for dev, but ensure prod deploy BLOCKS the inline OTP response when RESEND_API_KEY is empty (currently it just returns otp — could leak if deployed without the key). Recommend env flag like DEV_MODE=true gating the inline otp.",
+    "routes/invoices.py settle endpoint does not emit an audit-log event collection — only an embedded history list. For compliance, consider a separate audit_log collection.",
+    "routes/reports.py financial_summary date_from/to filter uses the $match pipeline stage but does not validate ISO format — a malformed date silently returns empty."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_phase5.py (new — 12 tests, 100% pass)",
+    "/app/frontend/src/pages/InvoicesPage.js (imports fix: added DialogFooter, Label, Textarea, CheckCircle2, FileMinus)"
+  ],
+  "success_rate": {"backend": "100% (12/12)", "frontend": "100% (all targeted Phase 5 flows verified after import fix)"},
+  "test_credentials": "admin@example.com / admin123 (verified, cookie-based JWT)",
+  "seed_data_creation": "test_phase5.py creates TEST_P5_Cust_<tag>, TEST_P5_Prod1/2_<tag> and several orders+invoices+returns. Data is left in place per user request. Admin password briefly changes + reverts during reset-password roundtrip — ends back at admin123.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "CRITICAL security note: /api/auth/forgot-password with empty RESEND_API_KEY returns the OTP in response body — this is intentional dev fallback but must NOT ship to prod without gating. All Phase 5 critical fixes (payment recalc on edit/delete, historical settle, profit w/ returns, hybrid INV#, credit notes, forgot-password, opening stock UI) are working end-to-end. Test file: /app/backend/tests/test_phase5.py (standalone, loads BASE_URL from /app/frontend/.env if env var missing). Run with pytest -v. Auth via requests.Session() and cookie (no Bearer token).",
+  "rca_of_the_issue": "E1 added several UI features to InvoicesPage (Settle dialog, credit-note view, FileMinus icon) but did not update the import block, causing: DialogFooter, CheckCircle2, Label, Textarea, FileMinus → Uncaught ReferenceError at render time. Page would show 'Uncaught runtime errors' overlay and entire Invoices screen was non-functional. Fix was purely adding missing imports — no logic change. Root cause: no lint/type-check gate before hot-reload; recommend adding 'no-undef' ESLint rule."
+}

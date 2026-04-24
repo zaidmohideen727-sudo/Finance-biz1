@@ -115,6 +115,7 @@ async def create_return(data: ReturnCreate, user=Depends(get_current_user)):
     doc = {
         "id": return_id,
         "return_number": return_number,
+        "credit_note_number": f"CN-{seq:04d}",
         "invoice_id": data.invoice_id,
         "invoice_number": invoice.get("invoice_number", ""),
         "customer_id": invoice.get("customer_id", ""),

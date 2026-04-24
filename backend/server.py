@@ -18,6 +18,7 @@ from auth import (
     create_access_token, create_refresh_token,
     get_current_user
 )
+from email_service import send_email, build_otp_email_html
 
 app = FastAPI(redirect_slashes=False)
 
@@ -116,9 +117,24 @@ async def forgot_password(req: ForgotPasswordRequest):
         "expires_at": (datetime.now(timezone.utc) + timedelta(minutes=15)).isoformat(),
         "used": False
     })
-    # For local deployment: OTP returned in response
-    # In production: send via email/SMS
-    return {"message": "OTP generated successfully", "otp": otp}
+
+    # Send OTP email (Resend). If it fails, we fall back to returning OTP in the
+    # response so the user can still reset the password.
+    app_name = os.environ.get("APP_NAME", "Commercial Trading")
+    html = build_otp_email_html(name=user.get("name", ""), otp=otp, app_name=app_name)
+    email_sent = await send_email(
+        to=email,
+        subject=f"{app_name} - Password Reset Code",
+        html=html,
+    )
+    if email_sent:
+        return {"message": f"OTP sent to {email}. Check your inbox.", "email_sent": True}
+    # Fallback — development / no Resend key
+    return {
+        "message": "OTP generated (email service not configured — shown inline).",
+        "email_sent": False,
+        "otp": otp,
+    }
 
 
 @auth_router.post("/reset-password")

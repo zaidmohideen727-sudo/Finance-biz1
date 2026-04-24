@@ -266,7 +266,21 @@ async def financial_summary(
             if product:
                 total_cost += (product.get("cost_price", 0) * item.get("quantity", 0))
 
-    total_profit = total_sales - total_cost
+    # Returns: subtract both revenue and cost — profit reflects only what stayed sold
+    ret_match = dict(df) if df else {}
+    ret_agg = await db.returns.aggregate([
+        {"$match": ret_match} if ret_match else {"$match": {}},
+        {"$unwind": "$items"},
+        {"$group": {"_id": None,
+                    "revenue": {"$sum": "$items.amount"},
+                    "cost": {"$sum": {"$multiply": ["$items.cost_price", "$items.quantity"]}}}}
+    ]).to_list(1)
+    ret_revenue = ret_agg[0]["revenue"] if ret_agg else 0
+    ret_cost = ret_agg[0]["cost"] if ret_agg else 0
+
+    net_sales = total_sales - ret_revenue
+    net_cost = total_cost - ret_cost
+    total_profit = net_sales - net_cost
 
     # Payables: supplier purchases in range
     pur_query = dict(df) if df else {}
@@ -296,7 +310,11 @@ async def financial_summary(
         "date_from": date_from,
         "date_to": date_to,
         "total_sales": round(total_sales, 2),
+        "returns_revenue": round(ret_revenue, 2),
+        "net_sales": round(net_sales, 2),
         "total_cost": round(total_cost, 2),
+        "returns_cost": round(ret_cost, 2),
+        "net_cost": round(net_cost, 2),
         "total_profit": round(total_profit, 2),
         "total_purchases": round(total_purchases, 2),
         "total_supplier_paid": round(total_sup_paid, 2),

@@ -10,18 +10,26 @@
 }
 
 .metric-card {
-  @apply bg-white border border-[hsl(var(--border))] shadow-sm rounded-md p-5 transition-all duration-200;
+  @apply border shadow-sm rounded-md p-5 transition-all duration-200;
+  background-color: hsl(var(--card));
+  color: hsl(var(--card-foreground));
+  border-color: hsl(var(--border));
 }
 .metric-card:hover {
   @apply shadow-md;
 }
 
 .data-table th {
-  @apply bg-[hsl(var(--muted))] border-y border-[hsl(var(--border))] text-xs font-bold uppercase tracking-wider text-[hsl(var(--muted-foreground))] py-3 px-4 text-left;
+  @apply border-y text-xs font-bold uppercase tracking-wider py-3 px-4 text-left;
+  background-color: hsl(var(--muted));
+  border-color: hsl(var(--border));
+  color: hsl(var(--muted-foreground));
 }
 .data-table td {
-  @apply border-b border-[hsl(var(--border))] py-3 px-4 align-middle text-sm;
+  @apply border-b py-3 px-4 align-middle text-sm;
+  border-color: hsl(var(--border));
+  color: hsl(var(--foreground));
 }
 .data-table tr:hover td {
-  @apply bg-[hsl(var(--muted))]/50;
+  background-color: hsl(var(--muted) / 0.5);
 }

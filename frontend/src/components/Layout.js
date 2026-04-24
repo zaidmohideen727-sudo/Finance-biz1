@@ -1,11 +1,13 @@
 import { useState } from "react";
 import { NavLink, Outlet, useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
+import { useTheme } from "@/contexts/ThemeContext";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   LayoutDashboard, Users, Truck, Package, ShoppingCart,
-  FileText, Receipt, CreditCard, BarChart3, LineChart, RotateCcw, History, LogOut, Menu
+  FileText, Receipt, CreditCard, BarChart3, LineChart, RotateCcw, History, LogOut, Menu,
+  Sun, Moon,
 } from "lucide-react";
 
 const NAV_ITEMS = [
@@ -25,6 +27,7 @@ const NAV_ITEMS = [
 
 export default function Layout() {
   const { user, logout } = useAuth();
+  const { theme, toggle: toggleTheme } = useTheme();
   const navigate = useNavigate();
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
@@ -76,7 +79,7 @@ export default function Layout() {
   );
 
   return (
-    <div className="flex h-screen overflow-hidden bg-[#F8FAFC]">
+    <div className="flex h-screen overflow-hidden bg-[hsl(var(--surface-muted))]">
       {/* Desktop Sidebar */}
       <aside className="hidden lg:flex lg:flex-col lg:w-56 bg-[#0F172A] flex-shrink-0">
         <SidebarContent />
@@ -95,7 +98,7 @@ export default function Layout() {
       {/* Main Content */}
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
         {/* Top Bar */}
-        <header className="h-14 bg-white border-b border-[hsl(var(--border))] flex items-center px-4 gap-3 flex-shrink-0 no-print">
+        <header className="h-14 bg-[hsl(var(--card))] border-b border-[hsl(var(--border))] flex items-center px-4 gap-3 flex-shrink-0 no-print">
           <Button
             variant="ghost"
             size="icon"
@@ -106,6 +109,17 @@ export default function Layout() {
             <Menu size={20} />
           </Button>
           <div className="flex-1" />
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={toggleTheme}
+            className="rounded-full"
+            aria-label="Toggle theme"
+            data-testid="theme-toggle-button"
+            title={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
+          >
+            {theme === "dark" ? <Sun size={18} /> : <Moon size={18} />}
+          </Button>
           <span className="text-sm text-muted-foreground hidden sm:inline">{user?.email}</span>
         </header>
 

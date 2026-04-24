@@ -84,8 +84,14 @@ export default function PaymentsPage() {
     : suppliers.map(s => ({ value: s.id, label: s.name }));
 
   const referenceOptions = form.payment_type === "customer"
-    ? invoices.filter(i => !form.entity_id || i.customer_id === form.entity_id).map(i => ({ value: i.id, label: `${i.invoice_number} - Rs. ${fmt(i.total_amount)}${i.status === "paid" ? " (paid)" : ""}` }))
-    : purchases.filter(p => !form.entity_id || p.supplier_id === form.entity_id).map(p => ({ value: p.id, label: `${p.purchase_number} - Rs. ${fmt(p.total_amount)}` }));
+    ? invoices.filter(i => !form.entity_id || i.customer_id === form.entity_id).map(i => ({
+        value: i.id,
+        label: `${i.invoice_number} · ${i.created_at?.slice(0,10) || ""} · Rs. ${fmt(i.total_amount)} · ${i.status || "unpaid"}`
+      }))
+    : purchases.filter(p => !form.entity_id || p.supplier_id === form.entity_id).map(p => ({
+        value: p.id,
+        label: `${p.purchase_number} · ${p.created_at?.slice(0,10) || ""} · Rs. ${fmt(p.total_amount)}`
+      }));
 
   const openNew = () => {
     setEditingId(null);
