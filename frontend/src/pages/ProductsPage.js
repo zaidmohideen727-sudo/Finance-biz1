@@ -72,7 +72,12 @@ export default function ProductsPage() {
   return (
     <div className="space-y-6" data-testid="products-page">
       <div className="flex items-center justify-between flex-wrap gap-3">
-        <h1 className="text-3xl sm:text-4xl font-semibold tracking-tight" style={{ fontFamily: 'Outfit, sans-serif' }}>Products</h1>
+        <div>
+          <h1 className="text-3xl sm:text-4xl font-semibold tracking-tight" style={{ fontFamily: 'Outfit, sans-serif' }}>Products</h1>
+          <p className="text-sm text-muted-foreground mt-1" data-testid="products-total-count">
+            {products.length} product{products.length === 1 ? "" : "s"} in catalog
+          </p>
+        </div>
         <Button onClick={openNew} className="bg-[#0F172A] hover:bg-[#1E293B] rounded-sm gap-2" data-testid="add-product-button">
           <Plus size={16} /> Add Product
         </Button>

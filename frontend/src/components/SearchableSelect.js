@@ -26,7 +26,7 @@ export function SearchableSelect({ options = [], value, onSelect, placeholder = 
       <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
         <Command>
           <CommandInput placeholder={searchPlaceholder} />
-          <CommandList>
+          <CommandList className="max-h-72 overflow-y-auto overscroll-contain">
             <CommandEmpty>No results found.</CommandEmpty>
             <CommandGroup>
               {options.map(option => (

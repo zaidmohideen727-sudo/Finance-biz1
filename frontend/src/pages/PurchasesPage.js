@@ -8,7 +8,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Textarea } from "@/components/ui/textarea";
 import { SearchableSelect } from "@/components/SearchableSelect";
 import { toast } from "sonner";
-import { Plus, Search, Trash2, FileText, X } from "lucide-react";
+import { Plus, Search, Trash2, FileText, X, Eye, Pencil } from "lucide-react";
 
 const fmt = (n) => new Intl.NumberFormat("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(n || 0);
 
@@ -20,7 +20,10 @@ export default function PurchasesPage() {
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
-  const [form, setForm] = useState({ supplier_id: "", supplier_name: "", order_id: "", order_number: "", items: [], notes: "" });
+  const [detailOpen, setDetailOpen] = useState(false);
+  const [selected, setSelected] = useState(null);
+  const [editing, setEditing] = useState(null);
+  const [form, setForm] = useState({ supplier_id: "", supplier_name: "", order_id: "", order_number: "", supplier_invoice_number: "", items: [], notes: "" });
 
   const fetchPurchases = useCallback(async () => {
     try {
@@ -46,8 +49,30 @@ export default function PurchasesPage() {
   const orderOptions = orders.map(o => ({ value: o.id, label: `${o.order_number} - ${o.customer_name}` }));
 
   const openNew = () => {
-    setForm({ supplier_id: "", supplier_name: "", order_id: "", order_number: "", items: [], notes: "" });
+    setEditing(null);
+    setForm({ supplier_id: "", supplier_name: "", order_id: "", order_number: "", supplier_invoice_number: "", items: [], notes: "" });
     setDialogOpen(true);
+  };
+
+  const openEdit = async (id) => {
+    try {
+      const { data } = await API.get(`/purchases/${id}`);
+      setEditing(data);
+      setForm({
+        supplier_id: data.supplier_id || "",
+        supplier_name: data.supplier_name || "",
+        order_id: data.order_id || "",
+        order_number: data.order_number || "",
+        supplier_invoice_number: data.supplier_invoice_number || "",
+        items: (data.items || []).map(i => ({
+          product_id: i.product_id, product_name: i.product_name,
+          quantity: i.quantity, cost_price: i.cost_price,
+        })),
+        notes: data.notes || "",
+        created_at_date: (data.created_at || "").slice(0, 10),
+      });
+      setDialogOpen(true);
+    } catch (err) { toast.error("Failed to load"); }
   };
 
   const selectSupplier = (id) => {
@@ -123,20 +148,29 @@ export default function PurchasesPage() {
           ) : (
             <div className="overflow-x-auto">
               <table className="data-table w-full">
-                <thead><tr><th>Purchase #</th><th>Supplier</th><th>Order #</th><th>Items</th><th>Amount</th><th>Date</th><th className="w-16">Actions</th></tr></thead>
+                <thead><tr><th>Purchase #</th><th>Supplier</th><th>Supplier Inv. #</th><th>Order #</th><th>Items</th><th>Amount</th><th>Date</th><th className="w-40">Actions</th></tr></thead>
                 <tbody>
                   {purchases.map(p => (
-                    <tr key={p.id}>
+                    <tr key={p.id} data-testid={`purchase-row-${p.id}`}>
                       <td className="font-medium">{p.purchase_number}</td>
                       <td>{p.supplier_name}</td>
-                      <td>{p.order_number || "-"}</td>
+                      <td className="text-muted-foreground">{p.supplier_invoice_number || "-"}</td>
+                      <td>{p.order_number || p.linked_invoice_number || "-"}</td>
                       <td>{p.items?.length || 0}</td>
                       <td>{"Rs. "}{fmt(p.total_amount)}</td>
                       <td className="text-muted-foreground">{p.created_at?.slice(0, 10)}</td>
                       <td>
-                        <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => handleDelete(p.id)} data-testid={`delete-purchase-${p.id}`}>
-                          <Trash2 size={14} />
-                        </Button>
+                        <div className="flex gap-1">
+                          <Button variant="ghost" size="sm" className="h-7 text-xs gap-1" onClick={() => viewDetail(p.id)} data-testid={`view-purchase-${p.id}`}>
+                            <Eye size={12} /> View
+                          </Button>
+                          <Button variant="ghost" size="sm" className="h-7 text-xs gap-1" onClick={() => openEdit(p.id)} data-testid={`edit-purchase-${p.id}`}>
+                            <Pencil size={12} /> Edit
+                          </Button>
+                          <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => handleDelete(p.id)} data-testid={`delete-purchase-${p.id}`}>
+                            <Trash2 size={14} />
+                          </Button>
+                        </div>
                       </td>
                     </tr>
                   ))}
@@ -149,7 +183,7 @@ export default function PurchasesPage() {
 
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader><DialogTitle style={{ fontFamily: 'Outfit, sans-serif' }}>Record Purchase</DialogTitle></DialogHeader>
+          <DialogHeader><DialogTitle style={{ fontFamily: 'Outfit, sans-serif' }}>{editing ? `Edit Purchase ${editing.purchase_number}` : "Record Purchase"}</DialogTitle></DialogHeader>
           <div className="space-y-4 py-2">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div className="space-y-2">
@@ -157,9 +191,19 @@ export default function PurchasesPage() {
                 <SearchableSelect options={supplierOptions} value={form.supplier_id} onSelect={selectSupplier} placeholder="Select supplier..." />
               </div>
               <div className="space-y-2">
+                <Label className="text-xs font-bold uppercase tracking-wider">Supplier Invoice #</Label>
+                <Input value={form.supplier_invoice_number} onChange={e => setForm(f => ({ ...f, supplier_invoice_number: e.target.value }))} placeholder="Their reference no." data-testid="purchase-supinv-input" />
+              </div>
+              <div className="space-y-2">
                 <Label className="text-xs font-bold uppercase tracking-wider">Linked Order (optional)</Label>
                 <SearchableSelect options={orderOptions} value={form.order_id} onSelect={selectOrder} placeholder="Link to order..." />
               </div>
+              {editing && (
+                <div className="space-y-2">
+                  <Label className="text-xs font-bold uppercase tracking-wider">Date</Label>
+                  <Input type="date" value={form.created_at_date || ""} onChange={e => setForm(f => ({ ...f, created_at_date: e.target.value }))} data-testid="purchase-date-input" />
+                </div>
+              )}
             </div>
 
             <div className="space-y-3">
@@ -193,6 +237,80 @@ export default function PurchasesPage() {
             <Button variant="outline" onClick={() => setDialogOpen(false)} className="rounded-sm">Cancel</Button>
             <Button onClick={handleCreate} className="bg-[#0F172A] hover:bg-[#1E293B] rounded-sm" data-testid="submit-purchase-button">Record Purchase</Button>
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Detail dialog */}
+      <Dialog open={detailOpen} onOpenChange={setDetailOpen}>
+        <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle style={{ fontFamily: 'Outfit, sans-serif' }}>
+              Purchase {selected?.purchase_number}
+            </DialogTitle>
+          </DialogHeader>
+          {selected && (
+            <div className="space-y-4 py-2">
+              <div className="grid grid-cols-2 gap-4 text-sm">
+                <div>
+                  <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Supplier</p>
+                  <p className="font-medium">{selected.supplier_name || "-"}</p>
+                </div>
+                <div>
+                  <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Supplier Invoice #</p>
+                  <p className="font-medium" data-testid="purchase-detail-sup-inv">{selected.supplier_invoice_number || "-"}</p>
+                </div>
+                <div>
+                  <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Date</p>
+                  <p className="font-medium">{selected.created_at?.slice(0, 10)}</p>
+                </div>
+                <div>
+                  <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Linked</p>
+                  <p className="font-medium">
+                    {selected.linked_invoice_number ? `Invoice ${selected.linked_invoice_number}` : selected.order_number || "—"}
+                  </p>
+                </div>
+              </div>
+              <div className="border-t pt-3">
+                <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground mb-2">Items</p>
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b">
+                      <th className="text-left py-2 font-bold text-xs uppercase">#</th>
+                      <th className="text-left py-2 font-bold text-xs uppercase">Item</th>
+                      <th className="text-right py-2 font-bold text-xs uppercase">Qty</th>
+                      <th className="text-right py-2 font-bold text-xs uppercase">Cost</th>
+                      <th className="text-right py-2 font-bold text-xs uppercase">Amount</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {selected.items?.map((it, i) => (
+                      <tr key={it.id || i} className="border-b">
+                        <td className="py-2">{i + 1}</td>
+                        <td className="py-2">{it.product_name}</td>
+                        <td className="py-2 text-right">{it.quantity}</td>
+                        <td className="py-2 text-right">Rs. {fmt(it.cost_price)}</td>
+                        <td className="py-2 text-right font-medium">Rs. {fmt(it.amount)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              <div className="flex justify-end pt-2 border-t">
+                <div className="w-56">
+                  <div className="flex justify-between font-semibold text-base">
+                    <span>Total</span>
+                    <span>Rs. {fmt(selected.total_amount)}</span>
+                  </div>
+                </div>
+              </div>
+              {selected.notes && (
+                <div className="bg-[hsl(var(--surface-muted))] p-3 rounded-sm text-sm">
+                  <p className="text-xs font-bold uppercase tracking-wider mb-1 text-muted-foreground">Notes</p>
+                  {selected.notes}
+                </div>
+              )}
+            </div>
+          )}
         </DialogContent>
       </Dialog>
     </div>

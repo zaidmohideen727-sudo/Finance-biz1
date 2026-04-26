@@ -10,7 +10,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { SearchableSelect } from "@/components/SearchableSelect";
 import { toast } from "sonner";
-import { Plus, RotateCcw, Trash2, Package, X } from "lucide-react";
+import { Plus, RotateCcw, Trash2, Package, X, Printer, Eye } from "lucide-react";
+import { printCreditNote } from "@/lib/print";
 
 const fmt = (n) => new Intl.NumberFormat("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(n || 0);
 
@@ -188,7 +189,7 @@ export default function ReturnsPage() {
                returns.length === 0 ? <div className="p-8 text-center text-muted-foreground"><RotateCcw size={32} className="mx-auto mb-2 opacity-30" />No returns recorded yet.</div> :
                 <div className="overflow-x-auto">
                   <table className="data-table w-full">
-                    <thead><tr><th>Return #</th><th>Credit Note</th><th>Invoice</th><th>Customer</th><th>Items</th><th>Amount</th><th>Date</th><th className="w-16">Actions</th></tr></thead>
+                    <thead><tr><th>Return #</th><th>Credit Note</th><th>Invoice</th><th>Customer</th><th>Items</th><th>Amount</th><th>Date</th><th className="w-32">Actions</th></tr></thead>
                     <tbody>
                       {returns.map(r => (
                         <tr key={r.id} data-testid={`return-row-${r.id}`}>
@@ -199,7 +200,14 @@ export default function ReturnsPage() {
                           <td>{r.items?.length || 0}</td>
                           <td className="font-semibold">Rs. {fmt(r.total_amount)}</td>
                           <td className="text-muted-foreground">{r.created_at?.slice(0, 10)}</td>
-                          <td><Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => handleDeleteReturn(r.id)} data-testid={`delete-return-${r.id}`}><Trash2 size={14} /></Button></td>
+                          <td>
+                            <div className="flex gap-1">
+                              <Button variant="ghost" size="sm" className="h-7 text-xs gap-1" onClick={() => printCreditNote(r)} data-testid={`print-cn-${r.id}`}>
+                                <Printer size={12} /> Print
+                              </Button>
+                              <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => handleDeleteReturn(r.id)} data-testid={`delete-return-${r.id}`}><Trash2 size={14} /></Button>
+                            </div>
+                          </td>
                         </tr>
                       ))}
                     </tbody>

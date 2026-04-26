@@ -19,6 +19,7 @@ import ReportsPage from "@/pages/ReportsPage";
 import AnalyticsPage from "@/pages/AnalyticsPage";
 import ReturnsPage from "@/pages/ReturnsPage";
 import MigrationPage from "@/pages/MigrationPage";
+import SettingsPage from "@/pages/SettingsPage";
 
 function ProtectedRoute({ children }) {
   const { user, loading } = useAuth();
@@ -49,6 +50,7 @@ function AppRoutes() {
         <Route path="analytics" element={<AnalyticsPage />} />
         <Route path="returns" element={<ReturnsPage />} />
         <Route path="migration" element={<MigrationPage />} />
+        <Route path="settings" element={<SettingsPage />} />
       </Route>
     </Routes>
   );

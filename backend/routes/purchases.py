@@ -28,9 +28,20 @@ class PurchaseCreate(BaseModel):
     created_at: Optional[str] = None         # backdated
 
 
+class PurchaseItemUpdate(BaseModel):
+    product_id: str
+    product_name: str
+    quantity: float
+    cost_price: float
+
+
 class PurchaseUpdate(BaseModel):
+    supplier_id: Optional[str] = None
+    supplier_name: Optional[str] = None
     supplier_invoice_number: Optional[str] = None
     notes: Optional[str] = None
+    created_at: Optional[str] = None
+    items: Optional[List[PurchaseItemUpdate]] = None
 
 
 async def _resolve_purchase_number(manual: Optional[str]) -> str:
@@ -130,12 +141,42 @@ async def create_purchase(data: PurchaseCreate, user=Depends(get_current_user)):
 
 @router.put("/{purchase_id}")
 async def update_purchase(purchase_id: str, data: PurchaseUpdate, user=Depends(get_current_user)):
-    update = {k: v for k, v in data.model_dump().items() if v is not None}
+    purchase = await db.purchases.find_one({"id": purchase_id}, {"_id": 0})
+    if not purchase:
+        raise HTTPException(status_code=404, detail="Purchase not found")
+
+    update = {}
+    if data.supplier_id is not None:
+        update["supplier_id"] = data.supplier_id
+    if data.supplier_name is not None:
+        update["supplier_name"] = data.supplier_name
+    if data.supplier_invoice_number is not None:
+        update["supplier_invoice_number"] = data.supplier_invoice_number
+    if data.notes is not None:
+        update["notes"] = data.notes
+    if data.created_at is not None:
+        update["created_at"] = data.created_at
+    if data.items is not None:
+        items = []
+        total = 0
+        for it in data.items:
+            doc_item = {
+                "id": str(uuid.uuid4()),
+                "product_id": it.product_id,
+                "product_name": it.product_name,
+                "quantity": it.quantity,
+                "cost_price": it.cost_price,
+                "amount": round(it.quantity * it.cost_price, 2),
+            }
+            total += doc_item["amount"]
+            items.append(doc_item)
+        update["items"] = items
+        update["total_amount"] = round(total, 2)
+
     if not update:
         raise HTTPException(status_code=400, detail="No fields to update")
     await db.purchases.update_one({"id": purchase_id}, {"$set": update})
-    purchase = await db.purchases.find_one({"id": purchase_id}, {"_id": 0})
-    return purchase
+    return await db.purchases.find_one({"id": purchase_id}, {"_id": 0})
 
 
 @router.delete("/{purchase_id}")

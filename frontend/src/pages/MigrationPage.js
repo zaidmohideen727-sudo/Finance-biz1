@@ -20,8 +20,8 @@ export default function MigrationPage() {
   const [products, setProducts] = useState([]);
   const [invoices, setInvoices] = useState([]);
 
-  // Historical invoice
-  const [invForm, setInvForm] = useState({ customer_id: "", customer_name: "", customer_shop_name: "", invoice_number: "", created_at: "", items: [], notes: "" });
+  // Historical invoice — supplier is REQUIRED (auto-creates linked purchase for payables)
+  const [invForm, setInvForm] = useState({ customer_id: "", customer_name: "", customer_shop_name: "", supplier_id: "", supplier_name: "", supplier_invoice_number: "", invoice_number: "", created_at: "", items: [], notes: "" });
 
   // Historical purchase
   const [purForm, setPurForm] = useState({ supplier_id: "", supplier_name: "", supplier_invoice_number: "", purchase_number: "", created_at: "", items: [], notes: "" });
@@ -50,12 +50,16 @@ export default function MigrationPage() {
     : [];
 
   // ─── Invoice ──────────────────────────────────────────────────────
-  const addInvItem = () => setInvForm(f => ({ ...f, items: [...f.items, { product_id: "", product_name: "", quantity: 1, unit_price: "" }] }));
+  const addInvItem = () => setInvForm(f => ({ ...f, items: [...f.items, { product_id: "", product_name: "", quantity: 1, unit_price: "", cost_price: "" }] }));
   const updInvItem = (idx, field, value) => setInvForm(f => {
     const items = [...f.items]; items[idx] = { ...items[idx], [field]: value };
     if (field === "product_id") {
       const prod = products.find(p => p.id === value);
-      if (prod) { items[idx].product_name = prod.name; items[idx].unit_price = prod.selling_price; }
+      if (prod) {
+        items[idx].product_name = prod.name;
+        items[idx].unit_price = prod.selling_price;
+        items[idx].cost_price = prod.cost_price ?? "";
+      }
     }
     return { ...f, items };
   });
@@ -64,20 +68,31 @@ export default function MigrationPage() {
 
   const submitHistoricalInvoice = async () => {
     if (!invForm.customer_id) { toast.error("Select customer"); return; }
+    if (!invForm.supplier_id) { toast.error("Select supplier (required — links payable)"); return; }
+    if (!invForm.supplier_invoice_number) { toast.error("Supplier Invoice # is required"); return; }
     if (invForm.items.length === 0) { toast.error("Add at least one item"); return; }
     try {
       const payload = {
         customer_id: invForm.customer_id,
         customer_name: invForm.customer_name,
         customer_shop_name: invForm.customer_shop_name,
-        items: invForm.items.map(i => ({ ...i, quantity: parseFloat(i.quantity), unit_price: parseFloat(i.unit_price) })),
+        supplier_id: invForm.supplier_id,
+        supplier_name: invForm.supplier_name,
+        supplier_invoice_number: invForm.supplier_invoice_number,
+        items: invForm.items.map(i => ({
+          ...i,
+          quantity: parseFloat(i.quantity),
+          unit_price: parseFloat(i.unit_price),
+          cost_price: i.cost_price === "" || i.cost_price == null ? null : parseFloat(i.cost_price),
+        })),
         notes: invForm.notes,
       };
       if (invForm.invoice_number) payload.invoice_number = invForm.invoice_number;
       if (invForm.created_at) payload.created_at = invForm.created_at + "T12:00:00";
-      await API.post("/invoices", payload);
-      toast.success("Historical invoice created");
-      setInvForm({ customer_id: "", customer_name: "", customer_shop_name: "", invoice_number: "", created_at: "", items: [], notes: "" });
+      const { data } = await API.post("/invoices", payload);
+      const linked = data.linked_purchase_number ? ` & purchase ${data.linked_purchase_number}` : "";
+      toast.success(`Historical invoice ${data.invoice_number}${linked} created`);
+      setInvForm({ customer_id: "", customer_name: "", customer_shop_name: "", supplier_id: "", supplier_name: "", supplier_invoice_number: "", invoice_number: "", created_at: "", items: [], notes: "" });
       load();
     } catch (err) { toast.error(err.response?.data?.detail || "Failed"); }
   };
@@ -175,6 +190,11 @@ export default function MigrationPage() {
                 <SearchableSelect options={customerOptions} value={invForm.customer_id} onSelect={id => { const c = customers.find(x => x.id === id); setInvForm(f => ({ ...f, customer_id: id, customer_name: c?.name || "", customer_shop_name: c?.shop_name || "" })); }} placeholder="Select customer..." />
               </div>
               <div><Label className="text-xs uppercase">Invoice Date *</Label><Input type="date" value={invForm.created_at} onChange={e => setInvForm(f => ({ ...f, created_at: e.target.value }))} data-testid="hist-inv-date" /></div>
+              <div>
+                <Label className="text-xs uppercase">Supplier * <span className="text-[10px] text-muted-foreground normal-case">(auto-creates payable)</span></Label>
+                <SearchableSelect options={supplierOptions} value={invForm.supplier_id} onSelect={id => { const s = suppliers.find(x => x.id === id); setInvForm(f => ({ ...f, supplier_id: id, supplier_name: s?.name || "" })); }} placeholder="Select supplier..." />
+              </div>
+              <div><Label className="text-xs uppercase">Supplier Invoice # *</Label><Input value={invForm.supplier_invoice_number} onChange={e => setInvForm(f => ({ ...f, supplier_invoice_number: e.target.value }))} placeholder="Supplier's reference" data-testid="hist-inv-supinv" /></div>
               <div><Label className="text-xs uppercase">Invoice Number (optional)</Label><Input value={invForm.invoice_number} onChange={e => setInvForm(f => ({ ...f, invoice_number: e.target.value }))} placeholder="Leave blank for auto" data-testid="hist-inv-number" /></div>
             </div>
 
@@ -184,13 +204,14 @@ export default function MigrationPage() {
                 <Button type="button" variant="outline" size="sm" onClick={addInvItem} className="rounded-sm text-xs gap-1" data-testid="hist-inv-add-item"><Plus size={12} /> Add Item</Button>
               </div>
               {invForm.items.map((it, idx) => (
-                <div key={idx} className="border rounded-sm p-3 bg-[#F8FAFC] space-y-2">
+                <div key={idx} className="border rounded-sm p-3 bg-[hsl(var(--surface-muted))] space-y-2">
                   <div className="flex justify-between items-center"><span className="text-xs font-bold text-muted-foreground">ITEM {idx + 1}</span>
                     <Button type="button" variant="ghost" size="icon" className="h-6 w-6" onClick={() => rmInvItem(idx)}><X size={14} /></Button></div>
                   <SearchableSelect options={productOptions} value={it.product_id} onSelect={v => updInvItem(idx, "product_id", v)} placeholder="Select product..." />
-                  <div className="grid grid-cols-2 gap-3">
-                    <Input type="number" placeholder="Qty" value={it.quantity} onChange={e => updInvItem(idx, "quantity", e.target.value)} />
-                    <Input type="number" placeholder="Unit Price" value={it.unit_price} onChange={e => updInvItem(idx, "unit_price", e.target.value)} />
+                  <div className="grid grid-cols-3 gap-3">
+                    <div><Label className="text-[10px] uppercase">Qty</Label><Input type="number" value={it.quantity} onChange={e => updInvItem(idx, "quantity", e.target.value)} /></div>
+                    <div><Label className="text-[10px] uppercase">Unit Price</Label><Input type="number" value={it.unit_price} onChange={e => updInvItem(idx, "unit_price", e.target.value)} /></div>
+                    <div><Label className="text-[10px] uppercase">Cost Price</Label><Input type="number" value={it.cost_price} onChange={e => updInvItem(idx, "cost_price", e.target.value)} placeholder="For payable" /></div>
                   </div>
                 </div>
               ))}

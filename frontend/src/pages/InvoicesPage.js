@@ -10,19 +10,27 @@ import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
 import { toast } from "sonner";
-import { Search, Trash2, Receipt, Printer, CheckCircle2, FileMinus } from "lucide-react";
+import { Search, Trash2, Receipt, Printer, CheckCircle2, FileMinus, Pencil, X, Plus } from "lucide-react";
+import { SearchableSelect } from "@/components/SearchableSelect";
+import { printInvoice } from "@/lib/print";
 
 const fmt = (n) => new Intl.NumberFormat("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(n || 0);
 const STATUS_COLORS = { unpaid: "bg-red-100 text-red-800", partial: "bg-amber-100 text-amber-800", paid: "bg-emerald-100 text-emerald-800" };
 
 export default function InvoicesPage() {
   const [invoices, setInvoices] = useState([]);
+  const [products, setProducts] = useState([]);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [loading, setLoading] = useState(true);
   const [printOpen, setPrintOpen] = useState(false);
   const [selectedInvoice, setSelectedInvoice] = useState(null);
   const [settleDialog, setSettleDialog] = useState({ open: false, invoice: null, amount: "", note: "" });
+  const [editDialog, setEditDialog] = useState({ open: false, invoice: null });
+
+  useEffect(() => {
+    API.get("/products").then(r => setProducts(r.data)).catch(() => {});
+  }, []);
 
   const fetchInvoices = useCallback(async () => {
     try {
@@ -44,7 +52,10 @@ export default function InvoicesPage() {
     } catch (err) { toast.error("Failed to load invoice"); }
   };
 
-  const handlePrint = () => window.print();
+  const handlePrint = () => {
+    if (selectedInvoice) printInvoice(selectedInvoice);
+    else window.print();
+  };
 
   const handleDelete = async (id) => {
     if (!window.confirm("Delete this invoice?")) return;
@@ -76,6 +87,57 @@ export default function InvoicesPage() {
       fetchInvoices();
     } catch (err) { toast.error(err.response?.data?.detail || "Failed to settle"); }
   };
+
+  const openEdit = async (id) => {
+    try {
+      const { data } = await API.get(`/invoices/${id}`);
+      setEditDialog({ open: true, invoice: { ...data, items: [...(data.items || [])], created_at_date: (data.created_at || "").slice(0, 10) } });
+    } catch (err) { toast.error("Failed to load invoice"); }
+  };
+
+  const updateEditItem = (idx, field, value) => {
+    setEditDialog(d => {
+      const items = [...d.invoice.items];
+      items[idx] = { ...items[idx], [field]: value };
+      if (field === "product_id") {
+        const p = products.find(x => x.id === value);
+        if (p) { items[idx].product_name = p.name; items[idx].unit_price = p.selling_price; }
+      }
+      return { ...d, invoice: { ...d.invoice, items } };
+    });
+  };
+
+  const addEditItem = () => {
+    setEditDialog(d => ({ ...d, invoice: { ...d.invoice, items: [...d.invoice.items, { product_id: "", product_name: "", quantity: 1, unit_price: "" }] } }));
+  };
+  const removeEditItem = (idx) => {
+    setEditDialog(d => ({ ...d, invoice: { ...d.invoice, items: d.invoice.items.filter((_, i) => i !== idx) } }));
+  };
+
+  const saveEdit = async () => {
+    const inv = editDialog.invoice;
+    if (!inv) return;
+    try {
+      const payload = {
+        customer_name: inv.customer_name,
+        customer_shop_name: inv.customer_shop_name,
+        notes: inv.notes,
+        items: inv.items.map(i => ({
+          product_id: i.product_id,
+          product_name: i.product_name,
+          quantity: parseFloat(i.quantity) || 0,
+          unit_price: parseFloat(i.unit_price) || 0,
+        })),
+      };
+      if (inv.created_at_date) payload.created_at = `${inv.created_at_date}T12:00:00`;
+      await API.put(`/invoices/${inv.id}`, payload);
+      toast.success("Invoice updated");
+      setEditDialog({ open: false, invoice: null });
+      fetchInvoices();
+    } catch (err) { toast.error(err.response?.data?.detail || "Failed to update"); }
+  };
+
+  const editTotal = (editDialog.invoice?.items || []).reduce((s, i) => s + (parseFloat(i.quantity) || 0) * (parseFloat(i.unit_price) || 0), 0);
 
   return (
     <div className="space-y-6" data-testid="invoices-page">
@@ -129,6 +191,9 @@ export default function InvoicesPage() {
                         <div className="flex gap-1">
                           <Button variant="ghost" size="sm" className="h-7 text-xs gap-1" onClick={() => viewInvoice(inv.id)} data-testid={`view-invoice-${inv.id}`}>
                             <Printer size={12} /> View
+                          </Button>
+                          <Button variant="ghost" size="sm" className="h-7 text-xs gap-1" onClick={() => openEdit(inv.id)} data-testid={`edit-invoice-${inv.id}`}>
+                            <Pencil size={12} /> Edit
                           </Button>
                           {inv.status !== "paid" && (
                             <Button variant="ghost" size="sm" className="h-7 text-xs gap-1 text-emerald-700" onClick={() => openSettle(inv.id)} data-testid={`settle-invoice-${inv.id}`}>
@@ -316,6 +381,82 @@ export default function InvoicesPage() {
             <Button onClick={confirmSettle} className="bg-emerald-700 hover:bg-emerald-800 text-white rounded-sm" data-testid="confirm-settle-button">
               Mark Settled
             </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Edit Invoice Dialog */}
+      <Dialog open={editDialog.open} onOpenChange={(v) => setEditDialog(d => ({ ...d, open: v }))}>
+        <DialogContent className="sm:max-w-3xl max-h-[92vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle style={{ fontFamily: 'Outfit, sans-serif' }}>
+              Edit Invoice {editDialog.invoice?.invoice_number}
+            </DialogTitle>
+          </DialogHeader>
+          {editDialog.invoice && (
+            <div className="space-y-4 py-2">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div className="space-y-2">
+                  <Label className="text-xs font-bold uppercase tracking-wider">Customer Name</Label>
+                  <Input value={editDialog.invoice.customer_name || ""} onChange={e => setEditDialog(d => ({ ...d, invoice: { ...d.invoice, customer_name: e.target.value } }))} data-testid="edit-customer-name" />
+                </div>
+                <div className="space-y-2">
+                  <Label className="text-xs font-bold uppercase tracking-wider">Shop Name</Label>
+                  <Input value={editDialog.invoice.customer_shop_name || ""} onChange={e => setEditDialog(d => ({ ...d, invoice: { ...d.invoice, customer_shop_name: e.target.value } }))} />
+                </div>
+                <div className="space-y-2">
+                  <Label className="text-xs font-bold uppercase tracking-wider">Date</Label>
+                  <Input type="date" value={editDialog.invoice.created_at_date || ""} onChange={e => setEditDialog(d => ({ ...d, invoice: { ...d.invoice, created_at_date: e.target.value } }))} data-testid="edit-invoice-date" />
+                </div>
+              </div>
+
+              <div className="space-y-3">
+                <div className="flex justify-between items-center">
+                  <Label className="text-xs font-bold uppercase tracking-wider">Items</Label>
+                  <Button type="button" variant="outline" size="sm" onClick={addEditItem} className="gap-1 text-xs rounded-sm" data-testid="edit-add-item">
+                    <Plus size={12} /> Add Item
+                  </Button>
+                </div>
+                {(editDialog.invoice.items || []).map((it, idx) => (
+                  <div key={idx} className="border rounded-sm p-3 bg-[hsl(var(--surface-muted))] space-y-2">
+                    <div className="flex justify-between items-center">
+                      <span className="text-xs font-bold text-muted-foreground">ITEM {idx + 1}</span>
+                      <Button type="button" variant="ghost" size="icon" className="h-6 w-6" onClick={() => removeEditItem(idx)} data-testid={`edit-remove-item-${idx}`}>
+                        <X size={14} />
+                      </Button>
+                    </div>
+                    <SearchableSelect
+                      options={products.map(p => ({ value: p.id, label: `${p.name} - Rs. ${fmt(p.selling_price)}` }))}
+                      value={it.product_id}
+                      onSelect={v => updateEditItem(idx, "product_id", v)}
+                      placeholder="Select product..."
+                    />
+                    <div className="grid grid-cols-3 gap-3">
+                      <div><Label className="text-[10px] uppercase">Qty</Label><Input type="number" value={it.quantity} onChange={e => updateEditItem(idx, "quantity", e.target.value)} /></div>
+                      <div><Label className="text-[10px] uppercase">Unit Price</Label><Input type="number" value={it.unit_price} onChange={e => updateEditItem(idx, "unit_price", e.target.value)} /></div>
+                      <div className="text-right pt-5 text-sm font-medium">
+                        Rs. {fmt((parseFloat(it.quantity) || 0) * (parseFloat(it.unit_price) || 0))}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              <Textarea
+                value={editDialog.invoice.notes || ""}
+                onChange={e => setEditDialog(d => ({ ...d, invoice: { ...d.invoice, notes: e.target.value } }))}
+                placeholder="Notes (optional)"
+                className="min-h-[50px]"
+              />
+
+              <div className="text-right text-lg font-semibold border-t pt-3" style={{ fontFamily: 'Outfit, sans-serif' }}>
+                Total: Rs. {fmt(editTotal)}
+              </div>
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEditDialog({ open: false, invoice: null })} className="rounded-sm">Cancel</Button>
+            <Button onClick={saveEdit} className="bg-[#0F172A] hover:bg-[#1E293B] rounded-sm text-white" data-testid="save-edit-invoice-button">Save Changes</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

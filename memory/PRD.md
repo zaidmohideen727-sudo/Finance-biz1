@@ -66,3 +66,29 @@ flow and Dark/Light theming.
 ## Environment
 - Backend `.env`: `MONGO_URL`, `DB_NAME`, `JWT_SECRET`, `CORS_ORIGINS`, `ADMIN_EMAIL`, `ADMIN_PASSWORD`, `RESEND_API_KEY` (empty), `SENDER_EMAIL=admincta22@gmail.com`, `SENDER_NAME`, `APP_NAME`.
 - Frontend `.env`: `REACT_APP_BACKEND_URL`.
+
+## Phase 6 — System Finalization (2026-04-26)
+
+### What was added
+1. **Invoice printing** rebuilt from scratch — `/app/frontend/src/lib/print.js` opens a dedicated print window with proper `@page A4 landscape` rules, paginates at 10 items / page, includes a "Continued on next page" hint, repeating headers, page-number footer, and a soft watermark that no longer overlaps content. Supports portrait fallback for long product names.
+2. **Printable Credit Notes** — same engine; a "Print" action on every Returns row generates a one-or-more-page PDF / printable credit note showing Returned Item, Qty, Unit Price, Credit, against the original invoice number.
+3. **Edit historical invoices & purchases** — `PUT /api/invoices/{id}` (customer/items/notes/created_at) and extended `PUT /api/purchases/{id}` (items/cost/supplier-inv-number/created_at). UI: pencil "Edit" button on invoice row → full item-editor dialog; pencil "Edit" on purchase row → re-uses create dialog in edit mode.
+4. **Invoice numbering — final** — removed `INV-` prefix; `_resolve_invoice_number` parses any numeric manual entry and bumps the counter so the next auto-number continues from there (manual `3755` → next auto `3756`). Non-numeric custom strings still allowed verbatim.
+5. **Migration → Historical Invoice** — supplier and supplier-invoice-number are now **required**. When provided (without a linked order), the backend auto-creates a linked `purchase` row using each item's cost_price, so customer receivable AND supplier payable are recorded in one shot.
+6. **Analytics custom date range** — backend `analytics/sales|purchases|profit` accept `date_from` & `date_to` (YYYY-MM-DD); UI shows two date pickers next to the period buttons with a Clear action.
+7. **Purchases visibility** — new `View` dialog showing supplier, supplier invoice #, date, items, totals. Works for new and historical (including auto-created from migration) purchases.
+8. **Settings page** — new `/settings` route. Theme toggle (light/dark) and document numbering (set last-used number for invoices / purchases / orders, with safety floor).
+9. **Products page** — total-product count under the title.
+10. **Order workflow UX** — "Default Supplier" block at top of order form auto-fills supplier on every newly added item (still overridable per-item). Default Supplier Invoice # also pre-fills.
+11. **Searchable dropdown scroll** — `CommandList` now has `max-h-72 overflow-y-auto overscroll-contain` — scrolls inside the popover, not the page.
+
+### Integrity rules retained (no regression)
+- Returns recorded as Credit Notes (`CN-NNNN`) flow into invoice balance, customer outstanding, and reports.
+- Manual settlement coexists with allocation-based payments.
+- Profit subtracts both returned revenue and returned cost.
+- Auto-generated purchases from migration are tagged `auto_generated:true` and link back to the source invoice.
+
+### Known constraints
+- Invoice numbering counter floor protection prevents setting Settings counter LOWER than the highest existing number — by design, to avoid collisions.
+- Print uses a popup window — browsers must allow pop-ups for the preview origin (handled with a friendly error message).
+

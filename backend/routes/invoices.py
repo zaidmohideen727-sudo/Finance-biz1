@@ -14,6 +14,7 @@ class InvoiceItemInput(BaseModel):
     product_name: str
     quantity: float
     unit_price: float
+    cost_price: Optional[float] = None  # used by historical-invoice → auto-purchase
 
 
 class InvoiceCreate(BaseModel):
@@ -26,6 +27,21 @@ class InvoiceCreate(BaseModel):
     notes: Optional[str] = ""
     invoice_number: Optional[str] = None   # manual override (hybrid numbering)
     created_at: Optional[str] = None        # backdated entry (ISO string)
+    # Migration helpers — when a historical invoice has supplier info, the
+    # backend will automatically create a linked purchase to keep payables
+    # accurate without forcing the user to enter both forms.
+    supplier_id: Optional[str] = ""
+    supplier_name: Optional[str] = ""
+    supplier_invoice_number: Optional[str] = ""
+
+
+class InvoiceUpdate(BaseModel):
+    customer_id: Optional[str] = None
+    customer_name: Optional[str] = None
+    customer_shop_name: Optional[str] = None
+    items: Optional[List[InvoiceItemInput]] = None
+    notes: Optional[str] = None
+    created_at: Optional[str] = None
 
 
 class InvoiceFromOrderInput(BaseModel):
@@ -34,8 +50,10 @@ class InvoiceFromOrderInput(BaseModel):
 
 
 async def _resolve_invoice_number(manual_number: Optional[str]) -> str:
-    """Returns the invoice_number to use. If manual, validates uniqueness;
-    else draws next from counter. Prevents duplicates strictly."""
+    """Returns the invoice_number to use. If manual is numeric, it is used as-is
+    AND the counter advances so the next auto-number continues from there
+    (e.g. manual 3755 → next auto is 3756). Non-numeric manual is used verbatim.
+    Auto numbers are plain integers (no 'INV-' prefix), zero-padded to 4 digits."""
     if manual_number:
         manual_number = manual_number.strip()
         if not manual_number:
@@ -44,9 +62,23 @@ async def _resolve_invoice_number(manual_number: Optional[str]) -> str:
         existing = await db.invoices.find_one({"invoice_number": manual_number}, {"_id": 0, "id": 1})
         if existing:
             raise HTTPException(status_code=400, detail=f"Invoice number '{manual_number}' already exists")
+        # If the manual number is a pure integer, push the counter forward so
+        # the next auto-number continues from there (no reset, no skip).
+        try:
+            n = int(manual_number)
+            current = await db.counters.find_one({"_id": "invoices"})
+            current_seq = int(current["seq"]) if current else 0
+            if n > current_seq:
+                await db.counters.update_one(
+                    {"_id": "invoices"},
+                    {"$set": {"seq": n}},
+                    upsert=True,
+                )
+        except ValueError:
+            pass
         return manual_number
     seq = await get_next_sequence("invoices")
-    return f"INV-{seq:04d}"
+    return f"{seq:04d}"
 
 
 async def _compute_total_returns(invoice_id: str) -> float:
@@ -158,7 +190,97 @@ async def create_invoice(data: InvoiceCreate, user=Depends(get_current_user)):
     }
     await db.invoices.insert_one(doc)
     doc.pop("_id", None)
+
+    # Migration helper: auto-create a linked purchase if supplier provided.
+    if (data.supplier_id or data.supplier_name) and not data.order_id:
+        purchase_items = []
+        purchase_total = 0
+        for item in data.items:
+            cost = item.cost_price if item.cost_price is not None else 0
+            pi = {
+                "id": str(uuid.uuid4()),
+                "product_id": item.product_id,
+                "product_name": item.product_name,
+                "quantity": item.quantity,
+                "cost_price": cost,
+                "amount": round(item.quantity * cost, 2),
+            }
+            purchase_total += pi["amount"]
+            purchase_items.append(pi)
+        seq = await get_next_sequence("purchases")
+        purchase_doc = {
+            "id": str(uuid.uuid4()),
+            "purchase_number": f"PUR-{seq:04d}",
+            "supplier_id": data.supplier_id or "",
+            "supplier_name": data.supplier_name or "",
+            "supplier_invoice_number": data.supplier_invoice_number or "",
+            "order_id": "",
+            "order_number": "",
+            "items": purchase_items,
+            "total_amount": round(purchase_total, 2),
+            "auto_generated": True,
+            "manual_number": False,
+            "linked_invoice_id": doc["id"],
+            "linked_invoice_number": invoice_number,
+            "notes": f"Auto-created from historical invoice {invoice_number}",
+            "created_at": created_at,
+        }
+        await db.purchases.insert_one(purchase_doc)
+        purchase_doc.pop("_id", None)
+        doc["linked_purchase_id"] = purchase_doc["id"]
+        doc["linked_purchase_number"] = purchase_doc["purchase_number"]
+        await db.invoices.update_one(
+            {"id": doc["id"]},
+            {"$set": {
+                "linked_purchase_id": purchase_doc["id"],
+                "linked_purchase_number": purchase_doc["purchase_number"],
+            }}
+        )
     return doc
+
+
+@router.put("/{invoice_id}")
+async def update_invoice(invoice_id: str, data: InvoiceUpdate, user=Depends(get_current_user)):
+    """Edit historical invoice. Recomputes total when items change."""
+    invoice = await db.invoices.find_one({"id": invoice_id}, {"_id": 0})
+    if not invoice:
+        raise HTTPException(status_code=404, detail="Invoice not found")
+
+    update = {}
+    if data.customer_id is not None:
+        update["customer_id"] = data.customer_id
+    if data.customer_name is not None:
+        update["customer_name"] = data.customer_name
+    if data.customer_shop_name is not None:
+        update["customer_shop_name"] = data.customer_shop_name
+    if data.notes is not None:
+        update["notes"] = data.notes
+    if data.created_at is not None:
+        update["created_at"] = data.created_at
+    if data.items is not None:
+        items = []
+        total = 0
+        for it in data.items:
+            doc_item = {
+                "id": str(uuid.uuid4()),
+                "product_id": it.product_id,
+                "product_name": it.product_name,
+                "quantity": it.quantity,
+                "unit_price": it.unit_price,
+                "amount": round(it.quantity * it.unit_price, 2),
+            }
+            total += doc_item["amount"]
+            items.append(doc_item)
+        update["items"] = items
+        update["total_amount"] = round(total, 2)
+
+    if not update:
+        raise HTTPException(status_code=400, detail="No fields to update")
+
+    await db.invoices.update_one({"id": invoice_id}, {"$set": update})
+    from routes.payments import recalc_invoice_status  # local import avoids cycle
+    await recalc_invoice_status(invoice_id)
+    return await get_invoice(invoice_id, user=user)
 
 
 @router.post("/from-order/{order_id}")

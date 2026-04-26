@@ -7,7 +7,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   LayoutDashboard, Users, Truck, Package, ShoppingCart,
   FileText, Receipt, CreditCard, BarChart3, LineChart, RotateCcw, History, LogOut, Menu,
-  Sun, Moon,
+  Sun, Moon, Settings as SettingsIcon,
 } from "lucide-react";
 
 const NAV_ITEMS = [
@@ -23,6 +23,7 @@ const NAV_ITEMS = [
   { to: "/analytics", icon: LineChart, label: "Analytics" },
   { to: "/reports", icon: BarChart3, label: "Reports" },
   { to: "/migration", icon: History, label: "Migration" },
+  { to: "/settings", icon: SettingsIcon, label: "Settings" },
 ];
 
 export default function Layout() {

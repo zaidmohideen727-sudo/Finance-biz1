@@ -41,6 +41,7 @@ export default function OrdersPage() {
   const [detailOpen, setDetailOpen] = useState(false);
   const [selectedOrder, setSelectedOrder] = useState(null);
   const [form, setForm] = useState(emptyForm());
+  const [defaultSupplier, setDefaultSupplier] = useState({ id: "", name: "", supplier_invoice_number: "" });
   const [invoiceDialog, setInvoiceDialog] = useState({ open: false, orderId: null, invoice_number: "", created_at: "" });
 
   const fetchOrders = useCallback(async () => {
@@ -126,7 +127,15 @@ export default function OrdersPage() {
     } catch (err) { toast.error("Failed to load order"); }
   };
 
-  const addItem = () => setForm(f => ({ ...f, items: [...f.items, emptyItem()] }));
+  const addItem = () => setForm(f => ({
+    ...f,
+    items: [...f.items, {
+      ...emptyItem(),
+      supplier_id: defaultSupplier.id || "",
+      supplier_name: defaultSupplier.name || "",
+      supplier_invoice_number: defaultSupplier.supplier_invoice_number || "",
+    }],
+  }));
 
   const updateItem = (idx, field, value) => {
     setForm(f => {
@@ -316,6 +325,29 @@ export default function OrdersPage() {
             <div className="space-y-2">
               <Label className="text-xs font-bold uppercase tracking-wider">Customer *</Label>
               <SearchableSelect options={customerOptions} value={form.customer_id} onSelect={selectCustomer} placeholder="Select customer..." searchPlaceholder="Search customers..." />
+            </div>
+
+            {/* Default Supplier: pre-fills new items so you don't pick supplier per-item.
+                You can still override per item (and add items from different suppliers). */}
+            <div className="border rounded-sm p-3 bg-[hsl(var(--surface-muted))] space-y-2" data-testid="default-supplier-block">
+              <Label className="text-xs font-bold uppercase tracking-wider">Default Supplier <span className="font-normal normal-case text-[10px] text-muted-foreground">(applied to new items — items can still be overridden individually)</span></Label>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <SearchableSelect
+                  options={supplierOptions}
+                  value={defaultSupplier.id}
+                  onSelect={id => {
+                    const s = suppliers.find(x => x.id === id);
+                    setDefaultSupplier(d => ({ ...d, id, name: s?.name || "" }));
+                  }}
+                  placeholder="Select default supplier..."
+                />
+                <Input
+                  value={defaultSupplier.supplier_invoice_number}
+                  onChange={e => setDefaultSupplier(d => ({ ...d, supplier_invoice_number: e.target.value }))}
+                  placeholder="Default supplier invoice # (optional)"
+                  data-testid="default-supinv-input"
+                />
+              </div>
             </div>
 
             <div className="space-y-3">

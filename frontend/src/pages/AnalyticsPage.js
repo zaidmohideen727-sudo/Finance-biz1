@@ -2,9 +2,10 @@ import { useState, useEffect, useCallback } from "react";
 import API from "@/lib/api";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, AreaChart, Area } from "recharts";
-import { TrendingUp, DollarSign, Wallet } from "lucide-react";
+import { TrendingUp, DollarSign, Wallet, Calendar } from "lucide-react";
 
 const fmt = (n) => new Intl.NumberFormat("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(n || 0);
 
@@ -17,6 +18,9 @@ const PERIODS = [
 
 export default function AnalyticsPage() {
   const [period, setPeriod] = useState("30d");
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
+  const [useCustom, setUseCustom] = useState(false);
   const [loading, setLoading] = useState(true);
   const [sales, setSales] = useState(null);
   const [profit, setProfit] = useState(null);
@@ -24,15 +28,18 @@ export default function AnalyticsPage() {
   const fetchData = useCallback(async () => {
     setLoading(true);
     try {
+      const params = useCustom && (dateFrom || dateTo)
+        ? { date_from: dateFrom || undefined, date_to: dateTo || undefined }
+        : { period };
       const [s, p] = await Promise.all([
-        API.get("/analytics/sales", { params: { period } }),
-        API.get("/analytics/profit", { params: { period } }),
+        API.get("/analytics/sales", { params }),
+        API.get("/analytics/profit", { params }),
       ]);
       setSales(s.data);
       setProfit(p.data);
     } catch (err) { console.error(err); }
     finally { setLoading(false); }
-  }, [period]);
+  }, [period, useCustom, dateFrom, dateTo]);
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
@@ -44,19 +51,30 @@ export default function AnalyticsPage() {
     <div className="space-y-6" data-testid="analytics-page">
       <div className="flex items-center justify-between flex-wrap gap-3">
         <h1 className="text-3xl sm:text-4xl font-semibold tracking-tight" style={{ fontFamily: 'Outfit, sans-serif' }}>Analytics</h1>
-        <div className="flex gap-1 bg-muted rounded-sm p-0.5" data-testid="period-selector">
-          {PERIODS.map(p => (
-            <Button
-              key={p.value}
-              size="sm"
-              variant={period === p.value ? "default" : "ghost"}
-              onClick={() => setPeriod(p.value)}
-              className={`rounded-sm h-8 ${period === p.value ? "bg-[#0F172A] text-white hover:bg-[#1E293B]" : ""}`}
-              data-testid={`period-${p.value}`}
-            >
-              {p.label}
-            </Button>
-          ))}
+        <div className="flex flex-col sm:flex-row gap-2 items-stretch sm:items-center">
+          <div className="flex gap-1 bg-muted rounded-sm p-0.5" data-testid="period-selector">
+            {PERIODS.map(p => (
+              <Button
+                key={p.value}
+                size="sm"
+                variant={!useCustom && period === p.value ? "default" : "ghost"}
+                onClick={() => { setUseCustom(false); setPeriod(p.value); }}
+                className={`rounded-sm h-8 ${!useCustom && period === p.value ? "bg-[#0F172A] text-white hover:bg-[#1E293B]" : ""}`}
+                data-testid={`period-${p.value}`}
+              >
+                {p.label}
+              </Button>
+            ))}
+          </div>
+          <div className="flex items-center gap-2 bg-muted rounded-sm p-1">
+            <Calendar size={14} className="text-muted-foreground ml-1" />
+            <Input type="date" value={dateFrom} onChange={e => { setUseCustom(true); setDateFrom(e.target.value); }} className="h-7 w-[135px] text-xs border-0 bg-transparent" data-testid="analytics-date-from" />
+            <span className="text-xs text-muted-foreground">→</span>
+            <Input type="date" value={dateTo} onChange={e => { setUseCustom(true); setDateTo(e.target.value); }} className="h-7 w-[135px] text-xs border-0 bg-transparent" data-testid="analytics-date-to" />
+            {useCustom && (
+              <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={() => { setUseCustom(false); setDateFrom(""); setDateTo(""); }} data-testid="analytics-clear-range">Clear</Button>
+            )}
+          </div>
         </div>
       </div>
 
