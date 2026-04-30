@@ -108,6 +108,20 @@ async def list_invoices(search: Optional[str] = None, customer_id: Optional[str]
         query = {"$and": conditions} if len(conditions) > 1 else conditions[0]
 
     invoices = await db.invoices.find(query, {"_id": 0}).sort("created_at", -1).to_list(1000)
+    # Enrich each invoice with net value after credit notes (for list display)
+    # Aggregate once per batch — O(1) DB call.
+    if invoices:
+        invoice_ids = [i["id"] for i in invoices]
+        ret_agg = await db.returns.aggregate([
+            {"$match": {"invoice_id": {"$in": invoice_ids}}},
+            {"$unwind": "$items"},
+            {"$group": {"_id": "$invoice_id", "total": {"$sum": "$items.amount"}}}
+        ]).to_list(10000)
+        ret_map = {r["_id"]: r["total"] for r in ret_agg}
+        for inv in invoices:
+            returned = ret_map.get(inv["id"], 0)
+            inv["returned_amount"] = round(returned, 2)
+            inv["net_amount"] = round(inv.get("total_amount", 0) - returned, 2)
     return invoices
 
 

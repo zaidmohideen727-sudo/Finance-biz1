@@ -324,3 +324,255 @@ async def financial_summary(
         "invoice_count": len(invoices),
         "generated_at": datetime.now(timezone.utc).isoformat()
     }
+
+
+# ────────────────────────────────────────────────────────────────────────────
+# Phase 7 — Supplier Outstanding
+# ────────────────────────────────────────────────────────────────────────────
+@router.get("/supplier-outstanding/{supplier_id}")
+async def supplier_outstanding(supplier_id: str, user=Depends(get_current_user)):
+    supplier = await db.suppliers.find_one({"id": supplier_id}, {"_id": 0})
+    if not supplier:
+        return {"error": "Supplier not found"}
+
+    purchases = await db.purchases.find({"supplier_id": supplier_id}, {"_id": 0}).sort("created_at", -1).to_list(1000)
+    items = []
+    total_payable = 0
+    for p in purchases:
+        alloc = await db.payments.aggregate([
+            {"$match": {"payment_type": "supplier"}},
+            {"$unwind": "$allocations"},
+            {"$match": {"allocations.reference_id": p["id"], "allocations.reference_type": "purchase"}},
+            {"$group": {"_id": None, "total": {"$sum": "$allocations.amount"}}}
+        ]).to_list(1)
+        paid = alloc[0]["total"] if alloc else 0
+        balance = round(float(p.get("total_amount", 0)) - paid, 2)
+        if balance > 0.01:
+            total_payable += balance
+        items.append({
+            "purchase_id": p["id"],
+            "purchase_number": p.get("purchase_number", ""),
+            "supplier_invoice_number": p.get("supplier_invoice_number", ""),
+            "date": p.get("created_at", "")[:10],
+            "amount": round(float(p.get("total_amount", 0)), 2),
+            "paid": round(paid, 2),
+            "balance": balance,
+            "linked_invoice_number": p.get("linked_invoice_number", ""),
+        })
+
+    opening = float(supplier.get("opening_balance", 0) or 0)
+    return {
+        "supplier_id": supplier_id,
+        "supplier_name": supplier.get("name", ""),
+        "opening_balance": opening,
+        "purchases": items,
+        "purchase_total": round(sum(i["amount"] for i in items), 2),
+        "paid_total": round(sum(i["paid"] for i in items), 2),
+        "total_payable": round(total_payable + opening, 2),
+        "generated_at": datetime.now(timezone.utc).isoformat(),
+    }
+
+
+@router.get("/supplier-payables")
+async def supplier_payables(user=Depends(get_current_user)):
+    """List all suppliers with their outstanding payable."""
+    suppliers = await db.suppliers.find({}, {"_id": 0}).to_list(1000)
+    out = []
+    for s in suppliers:
+        purchases = await db.purchases.find({"supplier_id": s["id"]}, {"_id": 0}).to_list(1000)
+        total = sum(float(p.get("total_amount", 0)) for p in purchases)
+        paid_agg = await db.payments.aggregate([
+            {"$match": {"payment_type": "supplier"}},
+            {"$unwind": "$allocations"},
+            {"$match": {"allocations.reference_type": "purchase"}},
+            {"$lookup": {"from": "purchases", "localField": "allocations.reference_id", "foreignField": "id", "as": "p"}},
+            {"$unwind": "$p"},
+            {"$match": {"p.supplier_id": s["id"]}},
+            {"$group": {"_id": None, "total": {"$sum": "$allocations.amount"}}}
+        ]).to_list(1)
+        paid = paid_agg[0]["total"] if paid_agg else 0
+        opening = float(s.get("opening_balance", 0) or 0)
+        balance = round(total + opening - paid, 2)
+        out.append({
+            "supplier_id": s["id"],
+            "supplier_name": s.get("name", ""),
+            "purchase_total": round(total, 2),
+            "opening_balance": round(opening, 2),
+            "paid_total": round(paid, 2),
+            "balance": balance,
+        })
+    out.sort(key=lambda x: -x["balance"])
+    return {
+        "suppliers": out,
+        "total_payable": round(sum(s["balance"] for s in out if s["balance"] > 0), 2),
+        "generated_at": datetime.now(timezone.utc).isoformat(),
+    }
+
+
+# ────────────────────────────────────────────────────────────────────────────
+# Phase 7 — Customer & Supplier Ledger
+# ────────────────────────────────────────────────────────────────────────────
+def _in_range(iso: str, date_from: Optional[str], date_to: Optional[str]) -> bool:
+    if not iso:
+        return True
+    d = iso[:10]
+    if date_from and d < date_from:
+        return False
+    if date_to and d > date_to:
+        return False
+    return True
+
+
+@router.get("/customer-ledger/{customer_id}")
+async def customer_ledger(customer_id: str, date_from: Optional[str] = None,
+                          date_to: Optional[str] = None, user=Depends(get_current_user)):
+    customer = await db.customers.find_one({"id": customer_id}, {"_id": 0})
+    if not customer:
+        return {"error": "Customer not found"}
+
+    entries = []
+    opening = float(customer.get("opening_balance", 0) or 0)
+
+    # Invoices → debit
+    invoices = await db.invoices.find({"customer_id": customer_id}, {"_id": 0}).to_list(5000)
+    for inv in invoices:
+        if not _in_range(inv.get("created_at", ""), date_from, date_to):
+            continue
+        entries.append({
+            "date": inv.get("created_at", "")[:10],
+            "type": "invoice",
+            "ref": inv.get("invoice_number", ""),
+            "description": f"Invoice {inv.get('invoice_number','')}",
+            "debit": round(float(inv.get("total_amount", 0)), 2),
+            "credit": 0,
+        })
+
+    # Payments → credit (by customer)
+    payments = await db.payments.find(
+        {"payment_type": "customer", "entity_id": customer_id}, {"_id": 0}
+    ).to_list(5000)
+    for p in payments:
+        if not _in_range(p.get("created_at", ""), date_from, date_to):
+            continue
+        cheque_hint = ""
+        if p.get("payment_method") == "cheque":
+            cqs = p.get("cheques", []) or []
+            nos = ", ".join([c.get("cheque_number", "") for c in cqs if c.get("cheque_number")])
+            if nos:
+                cheque_hint = f" (Cheque: {nos})"
+        entries.append({
+            "date": p.get("created_at", "")[:10],
+            "type": "payment",
+            "ref": p.get("payment_number", ""),
+            "description": f"Payment — {p.get('payment_method', 'cash').title()}{cheque_hint}",
+            "debit": 0,
+            "credit": round(float(p.get("amount", 0)), 2),
+        })
+
+    # Returns / Credit Notes → credit
+    returns = await db.returns.find({"customer_id": customer_id}, {"_id": 0}).to_list(5000)
+    for r in returns:
+        if not _in_range(r.get("created_at", ""), date_from, date_to):
+            continue
+        entries.append({
+            "date": r.get("created_at", "")[:10],
+            "type": "credit_note",
+            "ref": r.get("credit_note_number") or r.get("return_number", ""),
+            "description": f"Credit Note against {r.get('invoice_number','')}",
+            "debit": 0,
+            "credit": round(float(r.get("total_amount", 0)), 2),
+        })
+
+    entries.sort(key=lambda e: (e["date"], e["type"]))
+    running = opening
+    for e in entries:
+        running = round(running + float(e["debit"]) - float(e["credit"]), 2)
+        e["balance"] = running
+
+    return {
+        "customer_id": customer_id,
+        "customer_name": customer.get("name", ""),
+        "opening_balance": round(opening, 2),
+        "entries": entries,
+        "closing_balance": round(running, 2),
+        "date_from": date_from,
+        "date_to": date_to,
+        "generated_at": datetime.now(timezone.utc).isoformat(),
+    }
+
+
+@router.get("/supplier-ledger/{supplier_id}")
+async def supplier_ledger(supplier_id: str, date_from: Optional[str] = None,
+                          date_to: Optional[str] = None, user=Depends(get_current_user)):
+    supplier = await db.suppliers.find_one({"id": supplier_id}, {"_id": 0})
+    if not supplier:
+        return {"error": "Supplier not found"}
+
+    entries = []
+    opening = float(supplier.get("opening_balance", 0) or 0)
+
+    # Purchases → credit (payable grows)
+    purchases = await db.purchases.find({"supplier_id": supplier_id}, {"_id": 0}).to_list(5000)
+    for p in purchases:
+        if not _in_range(p.get("created_at", ""), date_from, date_to):
+            continue
+        entries.append({
+            "date": p.get("created_at", "")[:10],
+            "type": "purchase",
+            "ref": p.get("purchase_number", ""),
+            "description": f"Purchase {p.get('purchase_number','')} (Supplier Inv: {p.get('supplier_invoice_number','-')})",
+            "debit": 0,
+            "credit": round(float(p.get("total_amount", 0)), 2),
+        })
+        # Supplier return adjustments → debit (reduces payable)
+        for adj in p.get("supplier_return_adjustments", []) or []:
+            if not _in_range(adj.get("adjusted_at", ""), date_from, date_to):
+                continue
+            entries.append({
+                "date": adj.get("adjusted_at", "")[:10],
+                "type": "supplier_return",
+                "ref": adj.get("return_number", ""),
+                "description": f"Return to supplier ({adj.get('product_name','')})",
+                "debit": round(float(adj.get("amount", 0)), 2),
+                "credit": 0,
+            })
+
+    # Payments made → debit (payable reduces)
+    payments = await db.payments.find(
+        {"payment_type": "supplier", "entity_id": supplier_id}, {"_id": 0}
+    ).to_list(5000)
+    for p in payments:
+        if not _in_range(p.get("created_at", ""), date_from, date_to):
+            continue
+        cheque_hint = ""
+        if p.get("payment_method") == "cheque":
+            cqs = p.get("cheques", []) or []
+            nos = ", ".join([c.get("cheque_number", "") for c in cqs if c.get("cheque_number")])
+            if nos:
+                cheque_hint = f" (Cheque: {nos})"
+        entries.append({
+            "date": p.get("created_at", "")[:10],
+            "type": "payment",
+            "ref": p.get("payment_number", ""),
+            "description": f"Payment made — {p.get('payment_method', 'cash').title()}{cheque_hint}",
+            "debit": round(float(p.get("amount", 0)), 2),
+            "credit": 0,
+        })
+
+    entries.sort(key=lambda e: (e["date"], e["type"]))
+    running = opening
+    for e in entries:
+        # For suppliers: opening (+) purchases grow payable; payments (+debit) reduce it.
+        running = round(running + float(e["credit"]) - float(e["debit"]), 2)
+        e["balance"] = running
+
+    return {
+        "supplier_id": supplier_id,
+        "supplier_name": supplier.get("name", ""),
+        "opening_balance": round(opening, 2),
+        "entries": entries,
+        "closing_balance": round(running, 2),
+        "date_from": date_from,
+        "date_to": date_to,
+        "generated_at": datetime.now(timezone.utc).isoformat(),
+    }

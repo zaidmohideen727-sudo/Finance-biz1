@@ -274,7 +274,6 @@ export default function ReportsPage() {
           <TabsTrigger value="customer-pay" data-testid="customer-pay-report-tab">Customer Payments</TabsTrigger>
           <TabsTrigger value="supplier-pay" data-testid="supplier-pay-report-tab">Supplier Payments</TabsTrigger>
           <TabsTrigger value="financial" data-testid="financial-summary-tab">Financial Summary</TabsTrigger>
-          <TabsTrigger value="settings" data-testid="settings-tab">Settings</TabsTrigger>
         </TabsList>
 
         {/* Customer Outstanding */}

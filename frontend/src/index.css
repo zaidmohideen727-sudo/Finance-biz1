@@ -94,8 +94,9 @@
 
 /* In dark mode, override the hardcoded slate backgrounds that pages still use */
 .dark .bg-\[\#F8FAFC\] { background-color: hsl(var(--surface-muted)) !important; }
-.dark .bg-\[\#0F172A\] { background-color: hsl(var(--primary)) !important; color: hsl(var(--primary-foreground)) !important; }
-.dark .hover\:bg-\[\#1E293B\]:hover { background-color: hsl(var(--secondary)) !important; }
+/* Sidebar: keep the dark base color in BOTH themes (don't let dark mode invert it) */
+.dark .bg-\[\#0F172A\] { background-color: #0b1220 !important; color: #e2e8f0 !important; }
+.dark .hover\:bg-\[\#1E293B\]:hover { background-color: #1a2334 !important; }
 .dark .text-emerald-700 { color: hsl(160 64% 60%) !important; }
 .dark .text-emerald-800 { color: hsl(160 64% 65%) !important; }
 .dark .bg-emerald-50 { background-color: hsl(160 40% 14%) !important; }

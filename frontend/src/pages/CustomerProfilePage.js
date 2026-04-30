@@ -5,7 +5,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
-import { ArrowLeft, TrendingUp, Receipt, CreditCard, ShoppingCart, Package } from "lucide-react";
+import { ArrowLeft, TrendingUp, Receipt, CreditCard, ShoppingCart, Package, BookOpen } from "lucide-react";
 
 const fmt = (n) => new Intl.NumberFormat("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(n || 0);
 
@@ -24,13 +24,16 @@ export default function CustomerProfilePage() {
 
   return (
     <div className="space-y-6" data-testid="customer-profile-page">
-      <div className="flex items-center gap-3">
+      <div className="flex items-center gap-3 flex-wrap">
         <Button variant="ghost" size="icon" onClick={() => navigate("/customers")} data-testid="back-to-customers"><ArrowLeft size={18} /></Button>
-        <div>
+        <div className="flex-1">
           <h1 className="text-3xl font-semibold tracking-tight" style={{ fontFamily: 'Outfit, sans-serif' }}>{customer.name}</h1>
           {customer.shop_name && <p className="text-muted-foreground text-sm">{customer.shop_name}</p>}
           {customer.phone && <p className="text-muted-foreground text-xs">{customer.phone}</p>}
         </div>
+        <Button onClick={() => navigate(`/ledger/customer/${customer.id}`)} variant="outline" className="gap-2 rounded-sm" data-testid="customer-ledger-button">
+          <BookOpen size={14} /> View Ledger
+        </Button>
       </div>
 
       {/* Financial Summary */}

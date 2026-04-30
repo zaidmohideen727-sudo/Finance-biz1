@@ -1,13 +1,18 @@
-/* App-specific overrides */
+/* Sidebar (dark) — keep background fixed #0F172A but ensure text contrast in both themes */
 .sidebar-link {
   @apply flex items-center gap-3 px-3 py-2.5 rounded-sm text-sm font-medium transition-all duration-200;
+  color: rgba(255, 255, 255, 0.78);
 }
 .sidebar-link:hover {
-  @apply bg-white/10;
+  background-color: rgba(255, 255, 255, 0.10);
+  color: #ffffff;
 }
 .sidebar-link.active {
-  @apply bg-white/15 text-white;
+  background-color: rgba(255, 255, 255, 0.15);
+  color: #ffffff;
 }
+.dark .sidebar-link { color: rgba(226, 232, 240, 0.82); }
+.dark .sidebar-link:hover, .dark .sidebar-link.active { color: #ffffff; }
 
 .metric-card {
   @apply border shadow-sm rounded-md p-5 transition-all duration-200;

@@ -278,7 +278,7 @@ function renderCreditNoteHtml(cn, invoice = null) {
 <html><head><meta charset="utf-8"/>
 <title>Credit Note ${escape(cnNumber)}</title>
 <style>
-  @page { size: A4 landscape; margin: 10mm 0; }
+  @page { size: A5 portrait; margin: 8mm; }
   ${baseStyles}
 </style>
 </head>
@@ -316,3 +316,4 @@ export function printInvoice(invoice, opts = {}) {
 export function printCreditNote(creditNote, invoice = null) {
   openPrintWindow(renderCreditNoteHtml(creditNote, invoice));
 }
+

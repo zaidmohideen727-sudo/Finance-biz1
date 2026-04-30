@@ -20,6 +20,8 @@ import AnalyticsPage from "@/pages/AnalyticsPage";
 import ReturnsPage from "@/pages/ReturnsPage";
 import MigrationPage from "@/pages/MigrationPage";
 import SettingsPage from "@/pages/SettingsPage";
+import LedgerPage from "@/pages/LedgerPage";
+import DeliveryOrdersPage from "@/pages/DeliveryOrdersPage";
 
 function ProtectedRoute({ children }) {
   const { user, loading } = useAuth();
@@ -51,6 +53,8 @@ function AppRoutes() {
         <Route path="returns" element={<ReturnsPage />} />
         <Route path="migration" element={<MigrationPage />} />
         <Route path="settings" element={<SettingsPage />} />
+        <Route path="ledger/:type/:id" element={<LedgerPage />} />
+        <Route path="delivery" element={<DeliveryOrdersPage />} />
       </Route>
     </Routes>
   );

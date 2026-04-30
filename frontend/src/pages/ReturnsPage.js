@@ -24,21 +24,27 @@ export default function ReturnsPage() {
   const [loading, setLoading] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [stockDialogOpen, setStockDialogOpen] = useState(false);
-  const [form, setForm] = useState({ invoice_id: "", invoice: null, items: [], notes: "" });
+  const [form, setForm] = useState({ invoice_id: "", invoice: null, items: [], notes: "", destination: "warehouse", supplier_id: "", supplier_name: "", purchase_id: "" });
+  const [suppliers, setSuppliers] = useState([]);
+  const [purchases, setPurchases] = useState([]);
   const [stockForm, setStockForm] = useState({ product_id: "", product_name: "", quantity: "", cost_price: "", unit_price: "", notes: "" });
 
   const fetchData = useCallback(async () => {
     try {
-      const [r, s, inv, p] = await Promise.all([
+      const [r, s, inv, p, sup, pur] = await Promise.all([
         API.get("/returns"),
         API.get("/returned-stock"),
         API.get("/invoices"),
         API.get("/products"),
+        API.get("/suppliers"),
+        API.get("/purchases"),
       ]);
       setReturns(r.data);
       setStock(s.data);
       setInvoices(inv.data);
       setProducts(p.data);
+      setSuppliers(sup.data);
+      setPurchases(pur.data);
     } catch (err) { console.error(err); }
     finally { setLoading(false); }
   }, []);
@@ -49,7 +55,7 @@ export default function ReturnsPage() {
   const productOptions = products.map(p => ({ value: p.id, label: p.name }));
 
   const openNewReturn = () => {
-    setForm({ invoice_id: "", invoice: null, items: [], notes: "" });
+    setForm({ invoice_id: "", invoice: null, items: [], notes: "", destination: "warehouse", supplier_id: "", supplier_name: "", purchase_id: "" });
     setDialogOpen(true);
   };
 
@@ -101,8 +107,12 @@ export default function ReturnsPage() {
           reason: i.reason || "",
         })),
         notes: form.notes,
+        destination: form.destination || "warehouse",
+        supplier_id: form.supplier_id || "",
+        supplier_name: form.supplier_name || "",
+        purchase_id: form.purchase_id || "",
       });
-      toast.success("Return recorded");
+      toast.success(form.destination === "supplier" ? "Return to supplier recorded" : "Return recorded");
       setDialogOpen(false);
       fetchData();
     } catch (err) { toast.error(err.response?.data?.detail || "Failed"); }
@@ -274,6 +284,53 @@ export default function ReturnsPage() {
                 <div className="bg-muted p-3 rounded-sm text-sm flex justify-between">
                   <span>{form.invoice.invoice_number} · {form.invoice.customer_name}</span>
                   <span className="font-semibold">Rs. {fmt(form.invoice.total_amount)}</span>
+                </div>
+
+                {/* Destination selector — Phase 7 */}
+                <div className="border rounded-sm p-3 bg-[hsl(var(--surface-muted))] space-y-2" data-testid="return-destination-block">
+                  <Label className="text-xs font-bold uppercase tracking-wider">Return Destination</Label>
+                  <div className="grid grid-cols-2 gap-2">
+                    <Button
+                      type="button"
+                      variant={form.destination === "warehouse" ? "default" : "outline"}
+                      onClick={() => setForm(f => ({ ...f, destination: "warehouse", supplier_id: "", supplier_name: "", purchase_id: "" }))}
+                      className={`rounded-sm ${form.destination === "warehouse" ? "bg-[#0F172A] text-white" : ""}`}
+                      data-testid="return-dest-warehouse"
+                    >
+                      Return to Warehouse
+                    </Button>
+                    <Button
+                      type="button"
+                      variant={form.destination === "supplier" ? "default" : "outline"}
+                      onClick={() => setForm(f => ({
+                        ...f,
+                        destination: "supplier",
+                        supplier_id: form.invoice?.linked_purchase_id ? (purchases.find(p => p.id === form.invoice.linked_purchase_id)?.supplier_id || "") : "",
+                        supplier_name: form.invoice?.linked_purchase_id ? (purchases.find(p => p.id === form.invoice.linked_purchase_id)?.supplier_name || "") : "",
+                        purchase_id: form.invoice?.linked_purchase_id || "",
+                      }))}
+                      className={`rounded-sm ${form.destination === "supplier" ? "bg-amber-700 text-white hover:bg-amber-800" : ""}`}
+                      data-testid="return-dest-supplier"
+                    >
+                      Return to Supplier
+                    </Button>
+                  </div>
+                  {form.destination === "supplier" && (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
+                      <SearchableSelect
+                        options={suppliers.map(s => ({ value: s.id, label: s.name }))}
+                        value={form.supplier_id}
+                        onSelect={id => { const s = suppliers.find(x => x.id === id); setForm(f => ({ ...f, supplier_id: id, supplier_name: s?.name || "" })); }}
+                        placeholder="Select supplier..."
+                      />
+                      <SearchableSelect
+                        options={purchases.filter(p => !form.supplier_id || p.supplier_id === form.supplier_id).map(p => ({ value: p.id, label: `${p.purchase_number} · Rs. ${fmt(p.total_amount)}${p.supplier_invoice_number ? ` · ${p.supplier_invoice_number}` : ""}` }))}
+                        value={form.purchase_id}
+                        onSelect={v => setForm(f => ({ ...f, purchase_id: v }))}
+                        placeholder="Link to purchase (optional)"
+                      />
+                    </div>
+                  )}
                 </div>
 
                 <Label className="text-xs font-bold uppercase tracking-wider">Items to Return</Label>

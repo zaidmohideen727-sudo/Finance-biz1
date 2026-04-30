@@ -187,6 +187,7 @@ from routes.reports import router as reports_router
 from routes.analytics import router as analytics_router
 from routes.settings import router as settings_router
 from routes.returns import router as returns_router
+from routes.delivery_orders import router as delivery_orders_router
 from routes.returned_stock import router as returned_stock_router
 
 app.include_router(customers_router)
@@ -202,6 +203,7 @@ app.include_router(analytics_router)
 app.include_router(settings_router)
 app.include_router(returns_router)
 app.include_router(returned_stock_router)
+app.include_router(delivery_orders_router)
 
 
 @app.get("/api/health")

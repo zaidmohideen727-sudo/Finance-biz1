@@ -5,7 +5,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
-import { ArrowLeft, CreditCard, FileText, Package } from "lucide-react";
+import { ArrowLeft, CreditCard, FileText, Package, BookOpen } from "lucide-react";
 
 const fmt = (n) => new Intl.NumberFormat("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(n || 0);
 
@@ -24,13 +24,16 @@ export default function SupplierProfilePage() {
 
   return (
     <div className="space-y-6" data-testid="supplier-profile-page">
-      <div className="flex items-center gap-3">
+      <div className="flex items-center gap-3 flex-wrap">
         <Button variant="ghost" size="icon" onClick={() => navigate("/suppliers")} data-testid="back-to-suppliers"><ArrowLeft size={18} /></Button>
-        <div>
+        <div className="flex-1">
           <h1 className="text-3xl font-semibold tracking-tight" style={{ fontFamily: 'Outfit, sans-serif' }}>{supplier.name}</h1>
           {supplier.phone && <p className="text-muted-foreground text-sm">{supplier.phone}</p>}
           {supplier.is_primary && <Badge className="bg-[#0F172A] text-white text-xs rounded-full mt-1">Primary Supplier</Badge>}
         </div>
+        <Button onClick={() => navigate(`/ledger/supplier/${supplier.id}`)} variant="outline" className="gap-2 rounded-sm" data-testid="supplier-ledger-button">
+          <BookOpen size={14} /> View Ledger
+        </Button>
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">

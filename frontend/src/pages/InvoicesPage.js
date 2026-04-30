@@ -174,7 +174,7 @@ export default function InvoicesPage() {
           ) : (
             <div className="overflow-x-auto">
               <table className="data-table w-full">
-                <thead><tr><th>Invoice #</th><th>Customer</th><th>Order #</th><th>Amount</th><th>Status</th><th>Date</th><th className="w-44">Actions</th></tr></thead>
+                <thead><tr><th>Invoice #</th><th>Customer</th><th>Order #</th><th>Amount</th><th>Net Value</th><th>Status</th><th>Date</th><th className="w-56">Actions</th></tr></thead>
                 <tbody>
                   {invoices.map(inv => (
                     <tr key={inv.id} data-testid={`invoice-row-${inv.id}`}>
@@ -185,6 +185,14 @@ export default function InvoicesPage() {
                       </td>
                       <td>{inv.order_number || "-"}</td>
                       <td>{"Rs. "}{fmt(inv.total_amount)}</td>
+                      <td className="font-semibold" data-testid={`invoice-net-${inv.id}`}>
+                        {"Rs. "}{fmt(inv.net_amount != null ? inv.net_amount : inv.total_amount)}
+                        {inv.returned_amount > 0 && (
+                          <span className="ml-2 text-[11px] text-amber-700" title="After credit notes">
+                            (−{fmt(inv.returned_amount)})
+                          </span>
+                        )}
+                      </td>
                       <td><Badge variant="secondary" className={`${STATUS_COLORS[inv.status]} text-xs rounded-full`}>{inv.status}</Badge></td>
                       <td className="text-muted-foreground">{inv.created_at?.slice(0, 10)}</td>
                       <td>

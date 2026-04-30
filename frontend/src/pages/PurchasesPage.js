@@ -106,11 +106,30 @@ export default function PurchasesPage() {
     if (!form.supplier_id) { toast.error("Select a supplier"); return; }
     if (form.items.length === 0) { toast.error("Add at least one item"); return; }
     try {
-      await API.post("/purchases", form);
-      toast.success("Purchase recorded");
+      if (editing) {
+        const payload = {
+          supplier_id: form.supplier_id,
+          supplier_name: form.supplier_name,
+          supplier_invoice_number: form.supplier_invoice_number,
+          notes: form.notes,
+          items: form.items.map(i => ({
+            product_id: i.product_id,
+            product_name: i.product_name,
+            quantity: parseFloat(i.quantity) || 0,
+            cost_price: parseFloat(i.cost_price) || 0,
+          })),
+        };
+        if (form.created_at_date) payload.created_at = `${form.created_at_date}T12:00:00`;
+        await API.put(`/purchases/${editing.id}`, payload);
+        toast.success("Purchase updated");
+      } else {
+        await API.post("/purchases", form);
+        toast.success("Purchase recorded");
+      }
       setDialogOpen(false);
+      setEditing(null);
       fetchPurchases();
-    } catch (err) { toast.error(err.response?.data?.detail || "Failed to create"); }
+    } catch (err) { toast.error(err.response?.data?.detail || "Failed to save"); }
   };
 
   const handleDelete = async (id) => {
@@ -120,6 +139,14 @@ export default function PurchasesPage() {
       toast.success("Purchase deleted");
       fetchPurchases();
     } catch (err) { toast.error("Failed to delete"); }
+  };
+
+  const viewDetail = async (id) => {
+    try {
+      const { data } = await API.get(`/purchases/${id}`);
+      setSelected(data);
+      setDetailOpen(true);
+    } catch (err) { toast.error(err.response?.data?.detail || "Failed to load"); }
   };
 
   return (
